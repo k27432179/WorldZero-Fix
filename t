@@ -10,6 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
+print("[WZF] B2 startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -500,7 +501,7 @@ SetGlobal("setting up auto execute")
 if EF.Queue then
     local FileName = "JDRS/AutoExecute"
     if isfile(FileName) then
-        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
+        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/wzf-test/t"))()]])
         SV.AlreadyQueued = true
     end
 end
@@ -1529,57 +1530,53 @@ end
 
 SetGlobal("replay dungeon loop")
 local function ReplayDungeonLoop(Mission, Difficulty)
-    -- Keep UI and remotes alive until Roblox actually switches server.
-    -- CleanUpScript() invalidates ISV / Remotes and must not run before FireServer.
+    -- B2: only one destination and one request per running client.
+    -- A successful FireServer means the request was sent, NOT that the server
+    -- accepted the teleport. Never auto-retry without server confirmation.
     if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
         warn("[WZF] Invalid mission ID for replay:", tostring(Mission))
-        return
+        return false
     end
     if Mission == 49 then
         Mission = 1
     end
-    if not SV then
-        return
+    if not SV or ScriptUnloaded then
+        return false
     end
-    if SV.TransitionPending and SV.TransitionMission == Mission
-        and SV.TransitionDifficulty == Difficulty then
-        return -- Already trying this destination.
+    if SV.TransitionPending then
+        warn("[WZF] Duplicate dungeon transition blocked. Pending:",
+            tostring(SV.TransitionMission), tostring(SV.TransitionDifficulty),
+            "new:", tostring(Mission), tostring(Difficulty))
+        return false
     end
 
-    -- A new destination invalidates retries targeting an older dungeon.
-    SV.ReplayGeneration = (SV.ReplayGeneration or 0) + 1
-    local Generation = SV.ReplayGeneration
+    -- Set the lock before WaitForChild (which may yield).
     SV.TransitionPending = true
     SV.TransitionMission = Mission
     SV.TransitionDifficulty = Difficulty
 
-    local MaxAttempts = 4
-    for Attempt = 1, MaxAttempts do
-        if not SV or ScriptUnloaded or SV.ReplayGeneration ~= Generation then
-            return
+    local Success, Result = pcall(function()
+        local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
+        assert(Remote, "Teleport_StartRaid not available")
+        Remote:FireServer(Mission, Difficulty)
+    end)
+    if not Success then
+        warn("[WZF] Dungeon transition request failed:", tostring(Result))
+        if type(SaveErrorToFile) == "function" then
+            SaveErrorToFile("REPLAY DUNGEON", Result)
         end
-        if ISV and ISV.Debug then
-            print("[WZF] Dungeon transition:", Mission, "difficulty:", tostring(Difficulty), "attempt:", Attempt)
-        end
-        local Success, Result = pcall(function()
-            local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
-            assert(Remote, "Teleport_StartRaid not available")
-            Remote:FireServer(Mission, Difficulty)
-        end)
-        if not Success then
-            warn("[WZF] Dungeon transition request failed:", tostring(Result))
-            if type(SaveErrorToFile) == "function" then
-                SaveErrorToFile("REPLAY DUNGEON", Result)
-            end
-        end
-        task.wait(10) -- Allow server time to accept the transition.
-    end
-    if SV and SV.ReplayGeneration == Generation then
+        -- A local send failure may be retried manually.
         SV.TransitionPending = false
         SV.TransitionMission = nil
         SV.TransitionDifficulty = nil
-        warn("[WZF] Dungeon transition not confirmed after 4 attempts; retry lock released")
+        return false
     end
+
+    -- Keep locked until a fresh script instance in the destination server.
+    -- If the server rejects the transition silently, restart this test session
+    -- before another manual attempt; automatic re-send is deliberately disabled.
+    print("[WZF] Dungeon transition request sent once:", Mission, tostring(Difficulty), "job:", game.JobId)
+    return true
 end
 
 SetGlobal("rejoin last dungeon")
@@ -1646,6 +1643,9 @@ end
 
 SetGlobal("restart dungeon")
 local function RestartDungeon(RestartBypass)
+    if SV.TransitionPending then
+        return -- A destination has already been requested in this client.
+    end
     if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then 
         return
     end
@@ -3145,7 +3145,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -7010,7 +7010,7 @@ Toggles.AutoScriptToggle:OnChanged(function(ChangedValue) -- inject script
         end
         if not SV.AlreadyQueued then
             if EF.Queue then
-                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
+                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/wzf-test/t"))()]])
             end
         end
     else
