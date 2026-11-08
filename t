@@ -493,7 +493,7 @@ SetGlobal("setting up auto execute")
 if EF.Queue then
     local FileName = "JDRS/AutoExecute"
     if isfile(FileName) then
-        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/justdoingrandomstuff/World-Zero/main/autofarm"))()]])
+        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
         SV.AlreadyQueued = true
     end
 end
@@ -6965,7 +6965,7 @@ Toggles.AutoScriptToggle:OnChanged(function(ChangedValue) -- inject script
         end
         if not SV.AlreadyQueued then
             if EF.Queue then
-                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/justdoingrandomstuff/World-Zero/main/autofarm"))()]])
+                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
             end
         end
     else
@@ -6990,8 +6990,8 @@ end
 SetGlobal("get attack data")
 if IsDungeon and not KillSwitch then
     local Success, Result = pcall(function()
-        ClassSkills = SaveScriptToFiles("https://raw.githubusercontent.com/Veltrinix/oldobsidianlibrary/main/c", "C", 5.4)
-        PetSkills = SaveScriptToFiles("https://raw.githubusercontent.com/Veltrinix/oldobsidianlibrary/main/p", "P", 4.5)
+        ClassSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/c", "C", 5.4)
+        PetSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/p", "P", 4.5)
         if ClassSkills and PetSkills then
             Class = GetPlayerClass()
             if Class ~= nil then
