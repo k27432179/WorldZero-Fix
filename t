@@ -90,7 +90,7 @@ local function MakeErrorGui(MessageTitle, Message, Extra)
                 obj5.Name = "Error_Occurred"
                 obj5.TextScaled = true
                 obj5.FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-                obj5.Text = "A script error has occurred"
+                obj5.Text = "腳本發生錯誤"
                 obj5.TextSize = 37
                 obj5.Parent = obj3
 
@@ -119,7 +119,7 @@ local function MakeErrorGui(MessageTitle, Message, Extra)
                     obj8.FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
                     obj8.AnchorPoint = Vector2.new(0.5, 0.5)
                     obj8.TextColor3 = Color3.fromHex("e2e2e2")
-                    obj8.Text = "Join discord"
+                    obj8.Text = "加入 Discord"
                     obj8.TextSize = 35
                     obj8.Parent = obj6
 
@@ -156,7 +156,7 @@ local function MakeErrorGui(MessageTitle, Message, Extra)
                     obj12.TextScaled = true
                     obj12.FontFace = Font.new("rbxasset://fonts/families/FredokaOne.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
                     obj12.AnchorPoint = Vector2.new(0.5, 0.5)
-                    obj12.Text = "close"
+                    obj12.Text = "關閉"
                     obj12.TextSize = 25
                     obj12.Parent = obj10
 
@@ -298,8 +298,8 @@ local function MakeErrorGui(MessageTitle, Message, Extra)
         if setclipboard then
             setclipboard("https://discord.gg/bNWWpqFZbP")
             game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "Copied!",
-                Text = "The invite to the discord has been copied to your devices clipboard!",
+                Title = "已複製！",
+                Text = "Discord 邀請連結已複製到剪貼簿！",
                 Duration = 5,
                 Icon = "rbxasset://textures/ui/LuaApp/ExternalSite/discord@3x.png",
                 DisplayOrder = math.huge
@@ -3124,8 +3124,8 @@ local GenTab = Window:AddTab({
 })
 if IsMainMenu or IsWorld then
     GenTab:UpdateWarningBox({
-        Title = "Warning",
-        Text = "Script functionality is heavily limited when outside of dungeons. Most functions have been entirely disabled for your safety.",
+        Title = "提醒",
+        Text = "在地下城以外的區域，多數功能將受到限制；為避免異常，已停用大部分功能。",
         IsNormal = false,
         Visible = true,
         LockSize = true
@@ -3141,19 +3141,19 @@ local RightTab = GenTab:AddRightTabbox("Right Tabbox")
 local function ToggleKillaura(ChangedValue)
     if ChangedValue then
         Toggles.KillauraToggle:SetDisabled(true)
-        Toggles.KillauraToggle:SetText("<font color='#FF3333'>Killaura</font>")
+        Toggles.KillauraToggle:SetText("<font color='#FF3333'>殺戮光環</font>")
     else
         Toggles.KillauraToggle:SetDisabled(false)
-        Toggles.KillauraToggle:SetText("<font color='#ffffff'>Killaura</font>")
+        Toggles.KillauraToggle:SetText("<font color='#ffffff'>殺戮光環</font>")
     end
 end
 local function ToggleSafeKillaura(ChangedValue)
     if ChangedValue then
         Toggles.SafeKillauraToggle:SetDisabled(true)
-        Toggles.SafeKillauraToggle:SetText("<font color='#FF3333'>Safe killaura</font>")
+        Toggles.SafeKillauraToggle:SetText("<font color='#FF3333'>安全殺戮光環</font>")
     else
         Toggles.SafeKillauraToggle:SetDisabled(false)
-        Toggles.SafeKillauraToggle:SetText("<font color='#ffffff'>Safe killaura</font>")
+        Toggles.SafeKillauraToggle:SetText("<font color='#ffffff'>安全殺戮光環</font>")
     end
 end
 
@@ -3169,7 +3169,7 @@ CreateToggles({
 })
 SecondTab:AddLabel("帳戶延遲", true)
 SecondTab:AddSlider("PingSlider", {
-    Text = "Ping",
+    Text = "延遲 (Ping)",
     Suffix = "%",
     Default = 100,
     Min = 0,
@@ -3183,7 +3183,7 @@ SecondTab:AddSlider("PingSlider", {
 })
 SecondTab:AddLabel("殺戮光環攻擊延遲", true)
 SecondTab:AddSlider("AttackDelaySlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = 0,
     Min = 0,
     Max = 2,
@@ -3196,7 +3196,7 @@ SecondTab:AddSlider("AttackDelaySlider", {
 })
 SecondTab:AddLabel("攻擊間隔", true)
 SecondTab:AddSlider("DelayAttackSlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = 0,
     Min = 0,
     Max = 0.5,
@@ -3213,7 +3213,7 @@ SecondTab:AddSlider("DelayAttackSlider", {
 })
 SecondTab:AddLabel("怪物傳送旋轉速度", true)
 SecondTab:AddSlider("MobRotationSpeedSliderNew", {
-    Text = "Studs",
+    Text = "距離 (Studs)",
     Default = 20,
     Min = 0,
     Max = 100,
@@ -3226,7 +3226,7 @@ SecondTab:AddSlider("MobRotationSpeedSliderNew", {
 })
 FourthTab:AddLabel("寵物殺戮光環延遲", true)
 FourthTab:AddSlider("DelayPetAttackSlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = 0,
     Min = 0,
     Max = 2,
@@ -3243,7 +3243,7 @@ FourthTab:AddSlider("DelayPetAttackSlider", {
 })
 FourthTab:AddLabel("錯誤延遲重新加入", true)
 FourthTab:AddSlider("RestartStuckSlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = StuckDelay,
     Min = 30,
     Max = 120,
@@ -3277,24 +3277,24 @@ local EventTab = Window:AddTab({
     Icon = EventTabIconTable[os.date("*t").month]
 })
 local LeftTab = EventTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Boss fight")
-    local SecondTab = LeftTab:AddTab("Advanced")
+    local FirstTab = LeftTab:AddTab("Boss 戰鬥")
+    local SecondTab = LeftTab:AddTab("進階")
 local RightTab = EventTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = RightTab:AddTab("Wheel")
-    local FourthTab = RightTab:AddTab("Battlepass")
-    local FifthTab = RightTab:AddTab("Extra")
+    local ThirdTab = RightTab:AddTab("轉盤")
+    local FourthTab = RightTab:AddTab("通行證")
+    local FifthTab = RightTab:AddTab("其他")
 
 FirstTab:AddToggle("CollectBuffToggle", {
-    Text = "Collect selected buffs",
+    Text = "自動拾取選定增益",
     Default = false,
-    Tooltip = "Pick buffs from the dropdown menu below that the script will pick up"
+    Tooltip = "從下方選單指定要自動拾取的增益效果。"
 })
 FirstTab:AddDropdown("OrbBuffDropdown", {
     Values = {
-        DamageBuffOrb = "Damage Boost",
-        UltChargeBuffOrb = "Ultimate",
-        HealthBuffOrb = "Healing",
-        DefenseBuffOrb = "Shield"
+        DamageBuffOrb = "傷害提升",
+        UltChargeBuffOrb = "終極技能充能",
+        HealthBuffOrb = "治療",
+        DefenseBuffOrb = "護盾"
     },
     Multi = true,
     AllowNull = true,
@@ -3323,24 +3323,24 @@ SecondTab:AddDropdown("EventBossDropdown", {
     Multi = false,
     AllowNull = false,
     Default = "",
-    Text = "Select event boss",
+    Text = "選擇活動 Boss",
     Searchable = true,
     Callback = function(ChangedValue)
         if IsWorld or IsDungeon and ChangedValue then
             task.wait(1)
             if GetLeaderboardScore(ChangedValue, TotalLabel, DailyLabel, TotalAllowed, DailyAllowed, true) then
-                Library:Notify("Event boss clear limit reached.", 999999999)
+                Library:Notify("活動 Boss 次數已達上限。", 999999999)
                 local TempStop = true
                 local CanTarget = false
             end
         end
     end
 })
-TotalLabel = SecondTab:AddLabel("Total: ?", false)
+TotalLabel = SecondTab:AddLabel("累計：？", false)
 SecondTab:AddInput("TotalEventInput", {
-    Text = "Stop after X total kills",
+    Text = "累計擊殺達 X 次停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             TotalAllowed = ChangedValue
@@ -3348,24 +3348,24 @@ SecondTab:AddInput("TotalEventInput", {
     end
 })
     SecondTab:AddDivider({Margin = -5})
-DailyLabel = SecondTab:AddLabel("Daily: ?", false)
+DailyLabel = SecondTab:AddLabel("今日：？", false)
 SecondTab:AddInput("DailyEventInput", {
-    Text = "Stop after X daily kills",
+    Text = "今日擊殺達 X 次停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             DailyAllowed = ChangedValue
         end
     end
 })
-local CoinSpinLabel = ThirdTab:AddLabel("Coin cost: 5", true)
+local CoinSpinLabel = ThirdTab:AddLabel("金幣花費：5", true)
 local SpinCount = 1
 ThirdTab:AddInput("WheelSpinInput", {
-    Text = "Wheel spin amount",
+    Text = "轉盤次數",
     Default = 1,
     Placeholder = "1",
-    Tooltip = "If you enter more spins than you have in coins then the script will spin the wheel as many times as possible",
+    Tooltip = "如果輸入的轉盤次數超過現有金幣可負擔的次數，腳本會嘗試執行可負擔的最大次數。",
     Callback = function(ChangedValue)
         -- Obsidian inputs may return the text "10000" rather than number 10000.
         local raw = tostring(ChangedValue)
@@ -3375,16 +3375,16 @@ ThirdTab:AddInput("WheelSpinInput", {
         if amount and amount >= 1 and amount < math.huge and amount % 1 == 0 then
             SpinCount = amount
             local totalCost = amount * 5
-            CoinSpinLabel:SetText("Coin cost: " .. FormatNumber(totalCost))
+            CoinSpinLabel:SetText("金幣花費：" .. FormatNumber(totalCost))
         else
             SpinCount = 0
-            CoinSpinLabel:SetText("Coin cost: <font color=\"rgb(255, 0, 0)\">invalid number</font>")
+            CoinSpinLabel:SetText("金幣花費：<font color=\"rgb(255, 0, 0)\">無效數字</font>")
         end
     end
 })
 ThirdTab:AddButton({
-    Text = "Spin wheel",
-    Tooltip = "High amounts of spins WILL cause lag. I cannot do anything about this.",
+    Text = "開始轉盤",
+    Tooltip = "大量連續轉盤可能導致卡頓，請謹慎使用。",
     DoubleClick = true,
     Func = function()
         local JoinQueue = Remotes:FindFirstChild("EventSpinner_JoinQueue")
@@ -3397,8 +3397,8 @@ ThirdTab:AddButton({
     ThirdTab:AddDivider({Margin = -5})
 local RecyclingItems
 ThirdTab:AddButton({
-    Text = "Recycle wheel items",
-    Tooltip = "recycles all wheel items that are not locked or have a special hex\n\n<font color=\"rgb(255, 0, 0)\">you WILL crash if you have a lot of items, but they should be recycled when you rejoin</font>",
+    Text = "回收轉盤物品",
+    Tooltip = "回收未上鎖且沒有特殊色碼的轉盤物品。\n\n<font color=\"rgb(255, 0, 0)\">物品過多可能造成遊戲崩潰；重新加入後物品可能已完成回收。</font>",
     DoubleClick = true,
     Func = function()
         if IsMainMenu or RecyclingItems then
@@ -3406,7 +3406,7 @@ ThirdTab:AddButton({
         end
         RecyclingItems = true
         if not SV.CanRequire then
-            Library:Notify("Your executor doesn't support this option. Lacks require()", 5)
+            Library:Notify("執行環境不支援此功能（缺少 require()）", 5)
             return
         end
 
@@ -3462,29 +3462,29 @@ ThirdTab:AddButton({
     end
 })
 FourthTab:AddToggle("AutoClaimBattlepass", {
-    Text = "Auto claim battlepass",
+    Text = "自動領取通行證獎勵",
     Default = false,
-    Tooltip = "Only works the first time it's turned on, if you gain a rank you will need to wait for the next teleport or toggle it off and on again before it attempts to claim rewards again"
+    Tooltip = "此功能只會在啟用時嘗試領取一次。通行證升級後，請等待下次傳送或關閉再開啟。"
 })
 do
     local Success, Result = pcall(function()
         if EF.Desync and EF.RaknetFunction and EF.RaknetFunction.is_enabled() then
-            FifthTab:AddLabel("Can invisibly teleport: <font color='#33ff33'>Yes</font>", false)
+            FifthTab:AddLabel("可隱形傳送： <font color='#33ff33'>是</font>", false)
         else
-            FifthTab:AddLabel("Can invisibly teleport: <font color='#ff3333'>No</font>", false)
+            FifthTab:AddLabel("可隱形傳送： <font color='#ff3333'>否</font>", false)
         end
     end)
     if not Success then
-        FifthTab:AddLabel("Can invisibly teleport: <font color='#ff3333'>error</font>", false)
+        FifthTab:AddLabel("可隱形傳送： <font color='#ff3333'>錯誤</font>", false)
     end
 end
     FifthTab:AddDivider({Margin = -5})
 local FindingHidden
 local DailyESP
-FifthTab:AddLabel("Daily rewards", false)
+FifthTab:AddLabel("每日獎勵", false)
 FifthTab:AddButton({
-    Text = "Teleport",
-    Tooltip = "Teleports you to all of the daily rewards in the event hub such as the Obby end, Daily reward, and 3 hidden objects.\nIf you cannot invisibly teleport then you are blatantly teleported to all of them",
+    Text = "傳送",
+    Tooltip = "傳送到活動中心的每日獎勵位置，包括障礙關卡終點、每日獎勵與三個隱藏物件。\n若無法隱形傳送，角色會直接移動到各個位置。",
     Func = function()
         local Success, Result = pcall(function()
             if FindingHidden or IsMainMenu then
@@ -3492,7 +3492,7 @@ FifthTab:AddButton({
             end
             local EventFinderReward = Workspace:FindFirstChild("EventFinderReward", true)
             if not EventFinderReward then
-                Library:Notify("Go to the event hub if it is available.", 5)
+                Library:Notify("請先前往活動中心（若目前有開放）。", 5)
                 return
             end
             FindingHidden = true
@@ -3548,12 +3548,12 @@ FifthTab:AddButton({
         end
     end
 }):AddButton({
-    Text = "ESP",
-    Tooltip = "Adds a highlight around all hidden daily rewards around an event hubs map if available.",
+    Text = "高亮標示 (ESP)",
+    Tooltip = "若活動中心有隱藏每日獎勵，將在其周圍顯示高亮標記。",
     Func = function()
         local EventFinderReward = Workspace:FindFirstChild("EventFinderReward", true)
         if not EventFinderReward then
-            Library:Notify("Go to the event hub if it is available.", 5)
+            Library:Notify("請先前往活動中心（若目前有開放）。", 5)
             return
         end
         if DailyESP then
@@ -3604,10 +3604,10 @@ FifthTab:AddButton({
     end
 })
 local TeleportingHoops
-FifthTab:AddLabel("Claim flying hoops", false)
+FifthTab:AddLabel("飛行光圈收集", false)
 FifthTab:AddButton({
-    Text = "Teleport hoops",
-    Tooltip = "Teleports all the flying hoops on the map to your character and then returns them to their original position in an event hub if available.",
+    Text = "傳送光圈",
+    Tooltip = "若活動中心有飛行光圈，將光圈移至角色附近後再放回原位。",
     Func = function()
         if TeleportingHoops or IsMainMenu then
             return
@@ -3627,17 +3627,17 @@ FifthTab:AddButton({
                 end)
             end
         else
-            Library:Notify("Go to the event hub if it is available.", 5)
+            Library:Notify("請先前往活動中心（若目前有開放）。", 5)
         end
         TeleportingHoops = nil
     end
 })
 local FindingEggs
 local EggESP
-FifthTab:AddLabel("Scavenger hunt", false)
+FifthTab:AddLabel("尋寶活動", false)
 FifthTab:AddButton({
-    Text = "Teleport",
-    Tooltip = "Blatantly teleports your character to all of the hidden scavenger hunt objects on the map if there is a scavenger hunt available in the world you are in.\nIf available to your executor the script will reset your character and then invisibly teleport you to all of the hidden objects.",
+    Text = "傳送",
+    Tooltip = "若目前世界有尋寶活動，會將角色傳送到隱藏物件位置。\n若執行環境支援，可能先重置角色，再進行隱形傳送。",
     Func = function()
         local Success, Result = pcall(function()
             if not IsWorld or FindingEggs then
@@ -3684,8 +3684,8 @@ FifthTab:AddButton({
         end
     end
 }):AddButton({
-    Text = "ESP",
-    Tooltip = "Adds a highlight around all of the scavenger hunt objects if there is a scavenger hunt active in your current world.",
+    Text = "高亮標示 (ESP)",
+    Tooltip = "若目前世界有尋寶活動，會高亮標示所有尋寶物件。",
     Func = function()
         local Success, Result = pcall(function()
             if EggESP then return end
@@ -3727,14 +3727,14 @@ local TradeTab = Window:AddTab({
     Icon = "rbxassetid://9671046601"
 })
 local LeftTab = TradeTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Player shop")
+    local FirstTab = LeftTab:AddTab("玩家商店")
 local RightTab = TradeTab:AddRightTabbox("Right Tabbox")
-    local SecondTab = RightTab:AddTab("Trading")
+    local SecondTab = RightTab:AddTab("交易功能")
 
 FirstTab:AddToggle("PlacePlayerShopToggle", {
-    Text = "Auto place player shop",
+    Text = "自動擺設玩家商店",
     Default = false,
-    Tooltip = "Shop automatically gets removed if turned off",
+    Tooltip = "關閉此功能後，會自動撤除玩家商店。",
     Callback = function(ChangedValue)
         if ChangedValue then
             local CheckForShopSpots = Workspace:FindFirstChild("ShopLocations")
@@ -3742,7 +3742,7 @@ FirstTab:AddToggle("PlacePlayerShopToggle", {
                 for _, ShopSpots in CheckForShopSpots:GetChildren() do
                     if ShopSpots.PlayerOwner.Value == nil then
                         Remotes:WaitForChild("Shop_ClaimShop", math.huge):FireServer(ShopSpots)
-                        Library:Notify("Placed shop!", 2)
+                        Library:Notify("已擺設商店！", 2)
                     end
                 end
             end
@@ -3755,7 +3755,7 @@ FirstTab:AddDropdown("PlayerShopDropdown", {
     Values = {},
     Default = "",
     Multi = false,
-    Text = "Open selected players shop",
+    Text = "開啟選定玩家商店",
     Callback = function(ChangedValue)
         if ChangedValue and IsWorld and SV.CanRequire then
             local rShop = require(Client.Gui):Get("Shop")
@@ -3765,7 +3765,7 @@ FirstTab:AddDropdown("PlayerShopDropdown", {
     end
 })
 FirstTab:AddButton({
-    Text = "Scan for active player shops",
+    Text = "掃描玩家商店",
     Func = function()
         local ActivePlayerShops = {}
         local ShopLocations = Workspace:FindFirstChild("ShopLocations")
@@ -3786,7 +3786,7 @@ FirstTab:AddButton({
     end
 })
 SecondTab:AddButton({
-    Text = "Check trade for dupes",
+    Text = "檢查交易重複物品",
     Func = function()
         if SV.CheckingTrade or IsMainMenu then
             return
@@ -3814,7 +3814,7 @@ SecondTab:AddButton({
                 for Index, CheckID in StoredID do
                     if CheckID.ID.Value == ItemToCheck.ID.Value then
                         MarkItem(CheckID)
-                        Library:Notify("Found duped item: " ..CheckID.Name, 3)
+                        Library:Notify("發現重複物品：" ..CheckID.Name, 3)
                         DupedItemCount = DupedItemCount + 1
                         return
                     end
@@ -3830,7 +3830,7 @@ SecondTab:AddButton({
             end
 
             if not CurrentTrade then
-                Library:Notify("You are not trading anyone", 3)
+                Library:Notify("目前沒有進行交易", 3)
                 SV.CheckingTrade = nil
                 return
             end
@@ -3848,7 +3848,7 @@ SecondTab:AddButton({
             end
 
             if ItemsToCheck == 0 then
-                Library:Notify("No items to check", 3)
+                Library:Notify("沒有可檢查的物品", 3)
                 SV.CheckingTrade = nil
                 return
             end
@@ -3866,7 +3866,7 @@ SecondTab:AddButton({
             end
 
             if DupedItemCount == 0 then
-                Library:Notify("No duped items found", 3)
+                Library:Notify("沒有發現重複物品", 3)
                 SV.CheckingTrade = nil
                 return
             end
@@ -3878,14 +3878,14 @@ SecondTab:AddButton({
     end
 })
 SecondTab:AddButton({
-    Text = "Trade with last person",
+    Text = "與上一位玩家交易",
     Func = function()
         if SV.PlayerBeingTraded ~= nil then
             local TradeAccept = Remotes:WaitForChild("Trade_Accept")
             TradeAccept:FireServer(Players[SV.PlayerBeingTraded])
             SendTrade()
         else
-            Library:Notify("Last trade not found. Did YOU receive and accept a trade?", 5)
+            Library:Notify("找不到上一筆交易。你是否已收到並接受交易邀請？", 5)
         end
     end
 })
@@ -3898,18 +3898,18 @@ local ClassTab = Window:AddTab({
     Icon = "rbxassetid://9671047048"
 })
 LeftTab = ClassTab:AddLeftTabbox("Left Tabbox")
-    FirstTab = LeftTab:AddTab("Main")
+    FirstTab = LeftTab:AddTab("主要")
 RightTab = ClassTab:AddRightTabbox("Right Tabbox")
-    SecondTab = RightTab:AddTab("Extra")
+    SecondTab = RightTab:AddTab("其他")
 
 CreateToggles({
-    { "GeneralClassBuffToggle", Text = "General class buffs", Tooltip = "Gives you Dual Wielders and Guardians buff", Tab = FirstTab },
-    { "MoLBarrierToggle", Text = "MoL barrier", Tooltip = "Gives everyone else in the game a barrier instead of only yourself\nOnly Mage of Light can use this", Tab = SecondTab },
-    { "DemonBloodBindingToggle", Text = "Demon Blood Binding", Tooltip = "Activates Demons Blood Binding skill that takes away health while boosting your own damage\nOnly Demon can use this", Tab = SecondTab },
-    { "StormcallerSuperchargeToggle", Text = "Stormcaller Supercharge", Tooltip = "Activates Stormcallers Supercharge skill that takes away health while boosting your own damage and healing you a little when inflicting the Supercharge status\nOnly Stormcaller can use this", Tab = SecondTab },
+    { "GeneralClassBuffToggle", Text = "職業增益", Tooltip = "提供雙持者與守護者的職業增益。", Tab = FirstTab },
+    { "MoLBarrierToggle", Text = "光法護盾 (MoL)", Tooltip = "為遊戲中的其他玩家提供護盾，而不只是自己。\n僅光之法師可使用。", Tab = SecondTab },
+    { "DemonBloodBindingToggle", Text = "惡魔血之束縛", Tooltip = "啟用惡魔的血之束縛技能，消耗生命值來提高傷害。\n僅惡魔職業可使用。", Tab = SecondTab },
+    { "StormcallerSuperchargeToggle", Text = "風暴使超充能", Tooltip = "啟用風暴使的超充能技能，消耗生命值提高傷害，造成超充能狀態時可回復少量生命。\n僅風暴使可使用。", Tab = SecondTab },
 })
 
-local RangedClassLabel = FirstTab:AddLabel("Ranged class distance", false)
+local RangedClassLabel = FirstTab:AddLabel("遠程職業攻擊距離", false)
 FirstTab:AddSlider("ChangedRangedXSlider", {
     Text = "X",
     Default = 25,
@@ -3917,7 +3917,7 @@ FirstTab:AddSlider("ChangedRangedXSlider", {
     Max = 100,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Forward and Backwards\nDefault is 20",
+    Tooltip = "前後方向。\n預設值：20",
     Callback = function(ChangedValue)
         if Class and Class.Distance == "Ranged" then
             Xdistance = ChangedValue
@@ -3931,7 +3931,7 @@ FirstTab:AddSlider("ChangedRangedYSlider", {
     Max = 100,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Up and Down\nDefault is 50",
+    Tooltip = "上下方向。\n預設值：50",
     Callback = function(ChangedValue)
         if Class and Class.Distance == "Ranged" then
             Ydistance = ChangedValue
@@ -3939,7 +3939,7 @@ FirstTab:AddSlider("ChangedRangedYSlider", {
     end
 })
     FirstTab:AddDivider({Margin = -5})
-local MeleeClassLabel = FirstTab:AddLabel("Melee class distance", false)
+local MeleeClassLabel = FirstTab:AddLabel("近戰職業攻擊距離", false)
 FirstTab:AddSlider("ChangedMeleeXSlider", {
     Text = "X",
     Default = 13,
@@ -3947,7 +3947,7 @@ FirstTab:AddSlider("ChangedMeleeXSlider", {
     Max = 50,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Forward and Backwards\nDefault is 15",
+    Tooltip = "前後方向。\n預設值：15",
     Callback = function(ChangedValue)
         if Class and Class.Distance == "Melee" then
             Xdistance = ChangedValue
@@ -3961,7 +3961,7 @@ FirstTab:AddSlider("ChangedMeleeYSlider", {
     Max = 50,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Up and Down\nDefault is 8",
+    Tooltip = "上下方向。\n預設值：8",
     Callback = function(ChangedValue)
         if Class and Class.Distance == "Melee" then
             Ydistance = ChangedValue
@@ -3977,12 +3977,12 @@ local InventoryTab = Window:AddTab({
     Icon = "rbxassetid://9671046778"
 })
 local LeftTab = InventoryTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Inventory")
-    local SecondTab = LeftTab:AddTab("Settings")
-    local ThirdTab = LeftTab:AddTab("Equips")
+    local FirstTab = LeftTab:AddTab("背包")
+    local SecondTab = LeftTab:AddTab("設定")
+    local ThirdTab = LeftTab:AddTab("裝備")
 local RightTab = InventoryTab:AddRightTabbox("Right Tabbox")
-    local FourthTab = RightTab:AddTab("Cosmetics")
-    local FifthTab = RightTab:AddTab("Hexes")
+    local FourthTab = RightTab:AddTab("外觀")
+    local FifthTab = RightTab:AddTab("特殊色碼")
 
 local function ToggleValue(ChangedValue, ToggleValue)
     if ChangedValue and not IsMainMenu then
@@ -3993,13 +3993,13 @@ local function ToggleValue(ChangedValue, ToggleValue)
 end
 
 CreateToggles({
-    { "AutoSellToggle", Text = "Auto sell items", Tooltip = "Only applies to new items. Eggs are not sold.", Tab = FirstTab },
-    { "SellPetToggle", Text = "Sell pets", Tooltip = "Allow the auto sell functionalities to apply to pets as well", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "IncludePets" },
-    { "SellTowerEggToggle", Text = "Sell tower eggs", Tooltip = "Automatically sell eggs from towers if you are able to collect them", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "SellTowerEggs" },
-    { "SellCharmToggle", Text = "Sell tower eggs", Tooltip = "Automatically sell eggs from towers if you are able to collect them", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "IncludeCharms" },
-    { Button = true, Text = "Upgrade Primary", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Primary" },
-    { Button = true, Text = "Upgrade Offhand", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Offhand" },
-    { Button = true, Text = "Upgrade Armor", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Armor" }
+    { "AutoSellToggle", Text = "自動出售物品", Tooltip = "只處理新取得的物品，不會出售寵物蛋。", Tab = FirstTab },
+    { "SellPetToggle", Text = "出售寵物", Tooltip = "將寵物也納入自動出售範圍。", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "IncludePets" },
+    { "SellTowerEggToggle", Text = "出售高塔寵物蛋", Tooltip = "若可取得高塔寵物蛋，將自動出售。", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "SellTowerEggs" },
+    { "SellCharmToggle", Text = "出售護符", Tooltip = "將符合條件的護符納入自動出售範圍。", Tab = SecondTab, AttachedFunction = ToggleValue, FunctionValue = "IncludeCharms" },
+    { Button = true, Text = "升級主武器", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Primary" },
+    { Button = true, Text = "升級副手", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Offhand" },
+    { Button = true, Text = "升級防具", Tab = ThirdTab, AttachedFunction = UpgradeToMax, FunctionValue = "Armor" }
 })
     FirstTab:AddDivider()
 FirstTab:AddDropdown("AutoSellDropdown", {
@@ -4010,7 +4010,7 @@ FirstTab:AddDropdown("AutoSellDropdown", {
         ["5"] = "5"
     },
     Multi = false,
-    Text = "Keep tiers",
+    Text = "保留的品質",
     AllowNull = false,
     Default = "5",
     Callback = function(ChangedValue)
@@ -4024,7 +4024,7 @@ FirstTab:AddDropdown("AutoSellDropdown", {
 })
     FirstTab:AddDivider()
 CreateToggles({
-    { "KeepSelectedPerkToggle", Text = "Keep selected perks", Tooltip = "By default only S+ perks are kept", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "KeepPerks" }
+    { "KeepSelectedPerkToggle", Text = "保留選定詞條", Tooltip = "預設只保留 S+ 品質的詞條。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "KeepPerks" }
 })
 local SavePerkTable = {
     ["Gold Hoarder"] = { PerkValue = 0.2, PetPerkValue = 0.2, PerkName = "GoldDrop" },
@@ -4075,7 +4075,7 @@ local SavePerkTable = {
 }
 FirstTab:AddDropdown("PerkListDropdown", {
     Values = {},
-    Text = "Perks to keep",
+    Text = "要保留的詞條",
     Multi = true,
     AllowNull = true,
     Default = "",
@@ -4109,9 +4109,9 @@ table.sort(DropdownReference, function(a,b)
 end)
 Options.PerkListDropdown:SetValues(DropdownReference)
 FirstTab:AddButton({
-    Text = "Sell inventory",
+    Text = "出售背包物品",
     DoubleClick = true,
-    Tooltip = "all options including perk filtering are taken into account when selling your inventory",
+    Tooltip = "出售背包物品時，也會套用詞條與其他篩選條件。",
     Func = function()
         local pItems = ProfileInventory:WaitForChild("Items")
         for Index, NewItem in pItems:GetChildren() do
@@ -4119,15 +4119,15 @@ FirstTab:AddButton({
         end
     end
 })
-SecondTab:AddLabel("Perfect perk offset", true)
+SecondTab:AddLabel("完美詞條容許差值", true)
 SecondTab:AddSlider("PerkPercentSlider", {
-    Text = "Offset",
+    Text = "差值",
     Default = 0,
     Min = 0,
     Max = 5,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Allows you to increase the range at which perks are kept. For example if you want Attack Up 7% and 8% then you would add 1 to the offset",
+    Tooltip = "放寬保留詞條的容許差值。例如想同時保留攻擊提升 7% 與 8%，可將差值設為 1。",
     Callback = function(ChangedValue)
         if not ChangedValue then
             ChangedValue = 0
@@ -4137,7 +4137,7 @@ SecondTab:AddSlider("PerkPercentSlider", {
 })
 FourthTab:AddDropdown("CosmeticDropdown", {
     Values = {},
-    Text = "Cosmetics",
+    Text = "外觀",
     Multi = true,
     AllowNull = true,
     Default = "",
@@ -4145,18 +4145,18 @@ FourthTab:AddDropdown("CosmeticDropdown", {
     Searchable = true
 })
 FourthTab:AddButton({
-    Text = "Clear selection",
+    Text = "清除選取",
     DoubleClick = true,
     Func = function()
         Options.CosmeticDropdown:SetValue(nil)
     end
 })
 FourthTab:AddButton({
-    Text = "Scan cosmetics",
+    Text = "掃描外觀",
     Func = function()
         if IsDungeon or IsWorld then
             if not SV.CanRequire then
-                Library:Notify("Your executor doesn't support this option. Lacks require()", 5)
+                Library:Notify("執行環境不支援此功能（缺少 require()）", 5)
                 return
             end
 
@@ -4212,9 +4212,9 @@ FourthTab:AddButton({
     end
 })
     FourthTab:AddDivider()
-FourthTab:AddLabel("Pressing either of these buttons will either attempt to Recycle or Sell all the cosmetics you have selected above", true)
+FourthTab:AddLabel("以下按鈕會嘗試回收或出售上方已選取的所有外觀物品。", true)
 FourthTab:AddButton({
-    Text = "Recycle",
+    Text = "回收",
     DoubleClick = true,
     Func = function()
         if IsDungeon or IsWorld then
@@ -4226,7 +4226,7 @@ FourthTab:AddButton({
         end
     end
 }):AddButton({
-    Text = "Sell",
+    Text = "出售",
     DoubleClick = true,
     Func = function()
         if IsDungeon or IsWorld then
@@ -4238,30 +4238,30 @@ FourthTab:AddButton({
         end
     end
 })
-FifthTab:AddLabel("<font color='#FF3333'>ALL USER ENTERED HEXES MUST BE SEPARATED WITH COMMAS</font>\nAdding hexes example:\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
+FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
-local NumberOfEnteredHexes = FifthTab:AddLabel("Number of saved hexes: " ..FormatNumber(#SV.SpecialHexColors))
-local UserEnteredHexes = FifthTab:AddLabel("Saved hexes:\nn/a\n+ (all special hexes)", true)
+local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
+local UserEnteredHexes = FifthTab:AddLabel("已保留的色碼：\n無\n＋（所有特殊色碼）", true)
     FifthTab:AddDivider()
 FifthTab:AddInput("SaveUserHexesInput", {
-    Text = "Enter hexes to save",
+    Text = "輸入要保留的色碼",
     Default = "",
     ClearTextOnFocus = false,
-    Placeholder = "hexes here",
+    Placeholder = "請輸入色碼",
     Callback = function(ChangedValue)
         if IsWorld or IsDungeon then
             ChangedValue = tostring(ChangedValue)
             ChangedValue = string.lower(ChangedValue)
             if ChangedValue == "" or ChangedValue == " " then
-                NumberOfEnteredHexes:SetText("Number of saved hexes: " ..FormatNumber(#SV.SpecialHexColors))
-                UserEnteredHexes:SetText("Saved hexes:\nn/a\n+ (all special hexes)")
+                NumberOfEnteredHexes:SetText("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
+                UserEnteredHexes:SetText("已保留的色碼：\n無\n＋（所有特殊色碼）")
                 return
             end
             local StandardizeCommas = string.gsub(Options.SaveUserHexesInput.Value, ", ", ",")
             local RemoveHashTags = string.gsub(StandardizeCommas, "#", "")
             local SplitHexes = string.split(RemoveHashTags, ",")
-            NumberOfEnteredHexes:SetText("Number of saved hexes: " ..FormatNumber(#SV.SpecialHexColors + #SplitHexes))
-            UserEnteredHexes:SetText("Saved hexes:\n<font color='#33FF33'>" ..ChangedValue.. "</font>\n+ (all special hexes)")
+            NumberOfEnteredHexes:SetText("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors + #SplitHexes))
+            UserEnteredHexes:SetText("已保留的色碼：\n<font color='#33FF33'>" ..ChangedValue.. "</font>\n＋（所有特殊色碼）")
             return
         end
     end
@@ -4276,10 +4276,10 @@ local DungeonTab = Window:AddTab({
     Icon = "rbxassetid://18739736091"
 })
 local LeftTab = DungeonTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
-    local SecondTab = LeftTab:AddTab("Settings")
+    local FirstTab = LeftTab:AddTab("主要")
+    local SecondTab = LeftTab:AddTab("設定")
 local RightTab = DungeonTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = RightTab:AddTab("Advanced\n(nightmare challenge)")
+    local ThirdTab = RightTab:AddTab("進階\n（夢魘挑戰）")
 
 local function ToggleNightmare(ChangedValue, FunctionValue)
     if ChangedValue and IsDungeon then
@@ -4290,54 +4290,54 @@ local function ToggleNightmare(ChangedValue, FunctionValue)
 end
 
 CreateToggles({
-    { "ReplayMissionToggle", Text = "Auto restart mission", Tab = FirstTab },
-    { "CollectChestToggle", Text = "Collect chests", Tab = FirstTab },
-    { "HighestDungeonToggle", Text = "Do highest level dungeon", Tooltip = "Useful if you are leveling up as it moves to the highest level dungeon you're able to play and auto equips new gear if it's a higher level.", Tab = FirstTab },
-    { "RandomNightmareDungeonToggle", Text = "Random nightmare dungeon", Tooltip = "Instead of replaying the current dungeon it will pick a random nightmare dungeon.", Tab = FirstTab, AttachedFunction = ToggleNightmare, FunctionValue = "RandomNightmareDungeon" },
-    { "ReplayInfiniteTowerToggle", Text = "Limit infinite tower", Tooltip = "Allows you to restart infinite tower once a predetermined floor has been reached.", Tab = FirstTab }
+    { "ReplayMissionToggle", Text = "自動重開副本", Tab = FirstTab },
+    { "CollectChestToggle", Text = "收集寶箱", Tab = FirstTab },
+    { "HighestDungeonToggle", Text = "挑戰可進入的最高等級地下城", Tooltip = "適合練等：自動選擇可進入的最高等級地下城，並裝備等級更高的新裝備。", Tab = FirstTab },
+    { "RandomNightmareDungeonToggle", Text = "隨機夢魘地下城", Tooltip = "不重複目前的地下城，改為隨機選擇夢魘地下城。", Tab = FirstTab, AttachedFunction = ToggleNightmare, FunctionValue = "RandomNightmareDungeon" },
+    { "ReplayInfiniteTowerToggle", Text = "設定無限塔重置樓層", Tooltip = "達到指定樓層時自動重新開始無限塔。", Tab = FirstTab }
 })
 SV.RestartDungeonDelay = 3
-SecondTab:AddLabel("Restart dungeon delay", true)
+SecondTab:AddLabel("地下城重開延遲", true)
 SecondTab:AddSlider("ReplayMissionSlider", {
-    Text = "Restart delay",
+    Text = "重開延遲",
     Default = 3,
     Min = 1,
     Max = 60,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Changes the scripts delay when restarting the dungeon when `Auto restart mission` is selected.",
+    Tooltip = "調整啟用「自動重開副本」時的等待秒數。",
     Callback = function(ChangedValue)
         SV.RestartDungeonDelay = ChangedValue
     end
 })
 SV.CollectChestsDelay = 0.1
-SecondTab:AddLabel("Collect chest delay", true)
+SecondTab:AddLabel("寶箱收集延遲", true)
 SecondTab:AddSlider("ChestDelaySlider", {
-    Text = "Collect chest delay",
+    Text = "寶箱收集延遲",
     Default = 0.1,
     Min = 0.01,
     Max = 5,
     Rounding = 2,
     Compact = true,
-    Tooltip = "Changes the scripts delay between chests being collected.",
+    Tooltip = "調整每次收集寶箱之間的等待時間。",
     Callback = function(ChangedValue)
         SV.CollectChestsDelay = ChangedValue
     end
 })
-SecondTab:AddLabel("Infinite tower reset floor", true)
+SecondTab:AddLabel("無限塔重置樓層", true)
 SecondTab:AddSlider("InfResetSlider", {
-    Text = "Floor",
+    Text = "樓層",
     Default = 200,
     Min = 155,
     Max = 400,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Allows you to change the floor that infinite tower restarts at when the `Periodically reset inf tower` option is selected.",
+    Tooltip = "設定啟用無限塔重置功能後，在哪一層重新開始。",
     Callback = function(ChangedValue)
         RestartAtFloor = ChangedValue
     end
 })
-SecondTab:AddLabel("Prioritize nightmare dungeons", true)
+SecondTab:AddLabel("優先選擇夢魘地下城", true)
 SecondTab:AddDropdown("PrioNmDropdown", {
     Values = {},
     Multi = true,
@@ -4363,11 +4363,11 @@ for Index, Data in SV.DungeonListTable do
 end
 Options["PrioNmDropdown"]:SetValues(NMDisplayValues)
 NMDisplayValues = nil
-SV.TotalNightmareLabel = ThirdTab:AddLabel("Total nightmare clears: ?", false)
+SV.TotalNightmareLabel = ThirdTab:AddLabel("夢魘累計通關：？", false)
 ThirdTab:AddInput("TotalNightmareInput", {
-    Text = "Stop after X total clears",
+    Text = "累計通關 X 次後停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             SV.StopAfterTotalNightmare = ChangedValue
@@ -4375,11 +4375,11 @@ ThirdTab:AddInput("TotalNightmareInput", {
     end
 })
     ThirdTab:AddDivider({Margin = -5})
-SV.DailyNightmareLabel = ThirdTab:AddLabel("Daily nightmare clears: ?", false)
+SV.DailyNightmareLabel = ThirdTab:AddLabel("夢魘今日通關：？", false)
 ThirdTab:AddInput("DailyNightmareInput", {
-    Text = "Stop after X daily clears",
+    Text = "今日通關 X 次後停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             SV.StopAfterDailyNightmare = ChangedValue
@@ -4417,17 +4417,17 @@ local GuildTab = Window:AddTab({
     Icon = "rbxassetid://9671046895"
 })
 local GuildTabLeft = GuildTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = GuildTabLeft:AddTab("Main")
-    local SecondTab = GuildTabLeft:AddTab("Settings")
+    local FirstTab = GuildTabLeft:AddTab("主要")
+    local SecondTab = GuildTabLeft:AddTab("設定")
 local GuildTabRight = GuildTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = GuildTabRight:AddTab("Advanced")
-    local FourthTab = GuildTabRight:AddTab("Guild spy")
+    local ThirdTab = GuildTabRight:AddTab("進階")
+    local FourthTab = GuildTabRight:AddTab("公會資訊")
 
 CreateToggles({
-    { "WaitTimeToggle", Text = "Wait for legit time", Tooltip = "Starts the dungeon and then waits a predetermined amount of time before continuing to clear the dungeon", Tab = FirstTab },
-    { "DoAllDungeonsToggle", Text = "Do all dungeons", Tooltip = "Starts from whatever dungeon you're currently in and goes to the next dungeon once it's completed. Does not go back for previous dungeons!\n\nOrder dungeons are started in:\ninf -> towers 1-6 -> celestial -> all dungeons", Tab = FirstTab },
-    { "DelayInfFloorToggle", Text = "Delay inf tower floors", Tooltip = "When doing infinite tower the script no longer automatically teleports to the next floor and will let the default countdown teleport you to the next floor.", Tab = FirstTab },
-    { "GuildQuestToggle", Text = "Auto claim guild quests", Tab = FirstTab }
+    { "WaitTimeToggle", Text = "等待正常通關時間", Tooltip = "進入地下城後先等待指定時間，再繼續完成地下城。", Tab = FirstTab },
+    { "DoAllDungeonsToggle", Text = "依序挑戰所有地下城", Tooltip = "從目前地下城開始，通關後依序前往下一座，不會回頭挑戰之前的地下城。\n\n順序：無限塔 → 高塔 1～6 → 天界塔 → 其他地下城", Tab = FirstTab },
+    { "DelayInfFloorToggle", Text = "延遲無限塔換層", Tooltip = "挑戰無限塔時，不立即前往下一層，而是等待遊戲原本的倒數傳送。", Tab = FirstTab },
+    { "GuildQuestToggle", Text = "自動領取公會任務", Tab = FirstTab }
 })
 
     FirstTab:AddDivider({Margin = -5})
@@ -4440,41 +4440,41 @@ FirstTab:AddDropdown("DoAllDropdown", {
         "Play nightmare dungeons"
     },
     Multi = false,
-    Text = "Action when finished",
+    Text = "完成後的動作",
     AllowNull = false,
     Default = "Stop"
 })
-SecondTab:AddLabel("Add extra wait time", true)
+SecondTab:AddLabel("額外等待時間", true)
 SecondTab:AddSlider("AddExtraTimeSlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = 0,
     Min = 0,
     Max = 180,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Adds more time to the `Wait for a legit time` option if you don't think the scirpt is waiing long enough, or you want to wait longer for safety.",
+    Tooltip = "增加「等待正常通關時間」的額外秒數。",
     Callback = function(ChangedValue)
         SV.AddedGuildTime = ChangedValue
     end
 })
-SecondTab:AddLabel("Increment inf tower delay ", true)
+SecondTab:AddLabel("無限塔逐層增加延遲", true)
 SecondTab:AddSlider("IncrementInfiniteSlider", {
-    Text = "Seconds",
+    Text = "秒數",
     Default = 0,
     Min = 0,
     Max = 10,
     Rounding = 0,
     Compact = true,
-    Tooltip = "When using `Delay inf tower floors` this toggle will add increasingly more tine to wait after each boss floor has been completed.",
+    Tooltip = "啟用無限塔換層延遲時，每完成一個 Boss 樓層，就逐步延長等待時間。",
     Callback = function(ChangedValue)
         SV.IncrementInfiniteDelay = ChangedValue
     end
 })
-SV.TotalGuildPointLabel = ThirdTab:AddLabel("Total Guild Points: ?", false)
+SV.TotalGuildPointLabel = ThirdTab:AddLabel("公會累計積分：？", false)
 ThirdTab:AddInput("TotalKillInput", {
-    Text = "Stop after X total points",
+    Text = "累計積分達 X 時停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             SV.StopAfterTotalPoints = ChangedValue
@@ -4482,18 +4482,18 @@ ThirdTab:AddInput("TotalKillInput", {
     end
 })
     ThirdTab:AddDivider({Margin = -5})
-SV.DailyGuildPointLabel = ThirdTab:AddLabel("Daily Guild Points: ?", false)
+SV.DailyGuildPointLabel = ThirdTab:AddLabel("公會今日積分：？", false)
 ThirdTab:AddInput("DailyKillInput", {
-    Text = "Stop after X daily points",
+    Text = "今日積分達 X 時停止",
     Default = "",
-    Placeholder = "number here",
+    Placeholder = "請輸入數字",
     Callback = function(ChangedValue)
         if IsDungeon then
             SV.StopAfterDailyPoints = ChangedValue
         end
     end
 })
-local SpyOnGuild = FourthTab:AddLabel("No guild to spy on", true)
+local SpyOnGuild = FourthTab:AddLabel("尚未選擇要查看的公會", true)
     FourthTab:AddDivider()
 local StoredPoints
 local StoredChatLogs
@@ -4504,7 +4504,7 @@ local function ClipboardCheck(Copy, Data)
     end
 
     if not Options.GuildNamesDropdown.Value then
-        SpyOnGuild:SetText("No guild selected")
+        SpyOnGuild:SetText("尚未選擇公會")
         return true
     end
 
@@ -4522,7 +4522,7 @@ local function GetGuildPoints(Copy)
     local CachedGuild = GetCache:InvokeServer(string.upper(Options.GuildNamesDropdown.Value))
     local CachedMembers = CachedGuild and CachedGuild.Members
     if not CachedMembers then
-        SV.SpyOnGuild:SetText("This guilds data is no longer available")
+        SV.SpyOnGuild:SetText("此公會資料已無法取得")
     end
 
     local PlayerPoints = {}
@@ -4553,7 +4553,7 @@ local function GetGuildDescription(Copy)
     local CachedGuild = GetCache:InvokeServer(string.upper(Options.GuildNamesDropdown.Value))
     local CachedDescription = CachedGuild and CachedGuild.Description
     if not CachedDescription then
-        SpyOnGuild:SetText("This guilds data is no longer available")
+        SpyOnGuild:SetText("此公會資料已無法取得")
     end
     if not Copy then
         SpyOnGuild:SetText(CachedDescription)
@@ -4564,7 +4564,7 @@ local function GetGuildDescription(Copy)
 end
 FourthTab:AddDropdown("GuildNamesDropdown", {
     Values = {},
-    Text = "Guilds",
+    Text = "公會列表",
     Multi = false,
     AllowNull = true,
     Default = "",
@@ -4577,7 +4577,7 @@ FourthTab:AddDropdown("GuildNamesDropdown", {
     end
 })
 FourthTab:AddButton({
-    Text = "Scan for guilds",
+    Text = "掃描公會",
     Func = function()
         local ScannedGuilds = {}
         local UniqueGuilds = {}
@@ -4592,23 +4592,23 @@ FourthTab:AddButton({
     end
 })
 FourthTab:AddButton({
-    Text = "Players points",
+    Text = "玩家積分",
     Func = function()
         GetGuildPoints()
     end
 }):AddButton({
-    Text = "Clipboard",
+    Text = "複製到剪貼簿",
     Func = function()
         GetGuildPoints(true)
     end
 })
 FourthTab:AddButton({
-    Text = "Description",
+    Text = "說明",
     Func = function()
         GetGuildDescription()
     end
 }):AddButton({
-    Text = "Clipboard",
+    Text = "複製到剪貼簿",
     Func = function()
         GetGuildDescription(true)
     end
@@ -4622,12 +4622,12 @@ local ShopTab = Window:AddTab({
     Icon = "rbxassetid://12281229733"
 })
 local LeftTab = ShopTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Egg")
-    local SecondTab = LeftTab:AddTab("Nightmare")
+    local FirstTab = LeftTab:AddTab("寵物蛋")
+    local SecondTab = LeftTab:AddTab("夢魘")
     local ThirdTab = LeftTab:AddTab("PVP")
 local RightTab = ShopTab:AddRightTabbox("Left Tabbox")
-    local FourthTab = RightTab:AddTab("Guild")
-    local FifthTab = RightTab:AddTab("Event")
+    local FourthTab = RightTab:AddTab("公會")
+    local FifthTab = RightTab:AddTab("活動")
 
 local BuyEggList = {
     { InternalName = "StarEgg", VisualName = "Star egg", CoinPrice = 2000, CurrencyType = "Gold" },
@@ -4639,7 +4639,7 @@ local BuyEggList = {
 FirstTab:AddDropdown("EggShopDropdown", {
     Values = {},
     Multi = false,
-    Text = "egg name (price)",
+    Text = "寵物蛋（價格）",
     AllowNull = true,
     Default = nil,
     Searchable = true,
@@ -4653,24 +4653,24 @@ FirstTab:AddDropdown("EggShopDropdown", {
 })
 BuyEggList = BuildShopValues("EggShopDropdown", BuyEggList)
 FirstTab:AddButton({
-    Text = "Buy egg",
+    Text = "購買寵物蛋",
     Func = function()
         local TableReference = SV.SelectedEggItem
         if not TableReference then
-            Library:Notify("No egg is selected", 3)
+            Library:Notify("尚未選擇寵物蛋", 3)
             return
         end
         if not BuyFromEggShop(TableReference.CurrencyType, TableReference.InternalName, TableReference.CoinPrice, TableReference.VisualName) then
-            Library:Notify("You do not have enough gold", 3)
+            Library:Notify("金幣不足", 3)
         end
     end
 })
 CreateToggles({
-    { "AutoHatchEggToggle", Text = "Auto hatch selected egg", Tooltip = "Recommended to do this in dungeons where no one else can see you (lag is also reduced)", Tab = FirstTab },
-    { "AutoHatchInventoryEggToggle", Text = "Hatch eggs in inventory", Tooltip = "Hatch eggs in inventory", Tab = FirstTab}
+    { "AutoHatchEggToggle", Text = "自動孵化選定寵物蛋", Tooltip = "建議在獨立地下城中使用，較不易受到其他玩家干擾，也能減少卡頓。", Tab = FirstTab },
+    { "AutoHatchInventoryEggToggle", Text = "孵化背包中的蛋", Tooltip = "孵化背包中的蛋", Tab = FirstTab}
 })
 FirstTab:AddSlider("EggHatchDelaySlider", {
-    Text = "Egg hatch delay",
+    Text = "孵化間隔",
     Default = 0,
     Min = 0,
     Max = 10,
@@ -4691,7 +4691,7 @@ for Dropdown, Info in ipairs{
     Info.Tab:AddDropdown(tostring(Info[1]), {
         Values = {},
         Multi = false,
-        Text = "item name ("..Info.Currency.." coins)",
+        Text = "物品名稱（"..Info.Currency.." 貨幣）",
         AllowNull = true,
         Default = nil,
         MaxVisibleDropdownItems = 5,
@@ -4706,7 +4706,7 @@ for Dropdown, Info in ipairs{
     })
     Info.ShopList = BuildShopValues(tostring(Info[1]), Info.ShopList)
     Info.Tab:AddButton({
-        Text = "Buy item",
+        Text = "購買物品",
         Func = function()
             if Info.RequiredWorld then
                 if StringPlaceID ~= Info.RequiredWorld then
@@ -4722,7 +4722,7 @@ for Dropdown, Info in ipairs{
     })
     local AutoBuy
     Info.Tab:AddToggle(Info.ToggleName, {
-        Text = "Buy max selected item",
+        Text = "大量購買選定物品",
         Default = false,
         Callback = function(ChangedValue)
             if ChangedValue and (IsWorld or IsDungeon) and StringPlaceID == Info.RequiredWorld then
@@ -4751,21 +4751,21 @@ local OpenMenuTab = Window:AddTab({
     Icon = "rbxassetid://13534579488"
 })
 local LeftTab = OpenMenuTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
+    local FirstTab = LeftTab:AddTab("主要")
 local RightTab = OpenMenuTab:AddRightTabbox("Left Tabbox")
-    local SecondTab = RightTab:AddTab("Extra")
+    local SecondTab = RightTab:AddTab("其他")
 
 CreateToggles({
-    { Button = true, Text = "Teleport menu (old)", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "HubTeleport" },
-    { Button = true, Text = "Bank", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Bank" },
-    { Button = true, Text = "Upgrade station", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "ItemUpgrade" },
-    { Button = true, Text = "Sell station", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Sell" },
-    { Button = true, Text = "Zero altar", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Fusion" },
-    { Button = true, Text = "Pet fusion", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "FusePets" },
-    { Button = true, Text = "Salon", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "NewCharacterCustomizer" },
-    { Button = true, Text = "Recycler", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "Recycler" },
-    { Button = true, Text = "Furniture shop", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "FurnitureShop" },
-    { Button = true, Text = "Pet adventures", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "PetExpeditions" },
+    { Button = true, Text = "傳送選單（舊版）", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "HubTeleport" },
+    { Button = true, Text = "銀行", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Bank" },
+    { Button = true, Text = "裝備升級台", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "ItemUpgrade" },
+    { Button = true, Text = "販售台", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Sell" },
+    { Button = true, Text = "Zero 祭壇", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "Fusion" },
+    { Button = true, Text = "寵物融合", Tab = FirstTab, AttachedFunction = OpenMenu, FunctionValue = "FusePets" },
+    { Button = true, Text = "造型沙龍", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "NewCharacterCustomizer" },
+    { Button = true, Text = "回收站", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "Recycler" },
+    { Button = true, Text = "家具商店", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "FurnitureShop" },
+    { Button = true, Text = "寵物探險", Tab = SecondTab, AttachedFunction = OpenMenu, FunctionValue = "PetExpeditions" },
 })
 end -- for unloaded quick menus tab
 
@@ -4775,11 +4775,11 @@ local MiscTab = Window:AddTab({
     Icon = "rbxassetid://4801326994"
 })
 local LeftTab = MiscTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
-    local SecondTab = LeftTab:AddTab("Hide ui's")
+    local FirstTab = LeftTab:AddTab("主要")
+    local SecondTab = LeftTab:AddTab("隱藏介面")
 local RightTab = MiscTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = RightTab:AddTab("Extra")
-    local FourthTab = RightTab:AddTab("Performance")
+    local ThirdTab = RightTab:AddTab("其他")
+    local FourthTab = RightTab:AddTab("效能")
 
 local function ToggleMenu(ChangedValue, FirstMenu)
     local Success, Result = pcall(function()
@@ -4795,14 +4795,14 @@ local function ToggleMenu(ChangedValue, FirstMenu)
     end
 end
 ThirdTab:AddInput("JoinPlayerInput", {
-    Text = "Enter name",
+    Text = "輸入玩家名稱",
     Default = "",
-    Placeholder = "username",
-    Tooltip = "Enter a players exact actual name (not display) and teleport to them if they are currently in game and not in a dungeon.",
+    Placeholder = "玩家帳號名稱",
+    Tooltip = "輸入玩家的真實帳號名稱（不是顯示名稱），若對方在線上且不在地下城中，可嘗試加入。",
 })
 ThirdTab:AddButton({
-    Text = "Join player",
-    Tooltip = "Attempts to join the players name entered into the field above",
+    Text = "加入玩家",
+    Tooltip = "嘗試加入上方輸入的玩家所在伺服器。",
     Func = function()
         if not Options.JoinPlayerInput.Value or IsMainMenu or Options.JoinPlayerInput.Value == "" then
             return
@@ -4810,49 +4810,49 @@ ThirdTab:AddButton({
         if SV.CanRequire then
             local rTeleport = require(Teleport)
             rTeleport:TeleportToPlayer(LocalPlayer, Players:GetUserIdFromNameAsync(Options.JoinPlayerInput.Value), nil, true)
-            Library:Notify("Attempting to join player: " ..Options.JoinPlayerInput.Value, 5)
+            Library:Notify("正在嘗試加入玩家：" ..Options.JoinPlayerInput.Value, 5)
         else
-            Library:Notify("Your executor doesn't support this", 5)
+            Library:Notify("目前執行環境不支援此功能", 5)
         end
     end
 })
     ThirdTab:AddDivider({Margin = -5})
 CreateToggles({
-    { "MobCameraToggle", Text = "Camera on mob", Tooltip = "Positions the players camera on the current target mob", Tab = FirstTab },
-    { "DamageNumbersToggle", Text = "Remove damage numbers", Tooltip = "Prevents damage numbers from being rendered", Tab = FirstTab },
-    { "DamageFlashToggle", Text = "Hide damage flash", Tooltip = "Hides the red flash when mobs are damaged", Tab = FirstTab },
-    { "DeathEffectToggle", Text = "Remove death effects", Tooltip = "Prevents all death effects from being rendered", Tab = FirstTab },
-    { "KnockdownToggle", Text = "Disable knockdown", Tooltip = "Prevents the knockdown status from working (everyone can see this if they look at your statuses)", Tab = FirstTab },
-    { "ShowEndTimeToggle", Text = "Display end time", Tooltip = "Show the dungeons clear time when finished", Tab = FirstTab },
-    { "WaystoneToggle", Text = "Closest waystone", Tooltip = "Hide the icon for the closest waystone", Tab = SecondTab },
-    { "MissionObjectiveToggle", Text = "Mission objective", Tooltip = "Hide the text on your screen telling you what to do", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "MissionObjective" },
-    { "BossBarToggle", Text = "Boss bar", Tooltip = "Hide boss bars on your screen", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "BossHealthbar" },
-    { "PlayerHotbarToggle", Text = "Hotbar", Tooltip = "Hide your health and skill ui", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "Hotbar" },
-    { "MobilePlayerSkills", Text = "Mobile skills", Tooltip = "Hide the mobile skill ui", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "TouchInput" },
-    { "MainGuiToggle", Text = "Event icon", Tooltip = "Hide the event icon", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "MainGui" },
-    { "HideMenuToggle", Text = "Menu", Tooltip = "Hide the in-game gui tab", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "Menu" },
-    { "DevKickToggle", Text = "Kick on dev join", Tooltip = "Kick you from the game if a dev joins you", Tab = ThirdTab },
-    { "ProfilerToggle", Text = "Show account info", Tooltip = "Display basic information about the account being used", Tab = ThirdTab },
-    { "AFKToggle", Text = "Anti AFK", Tooltip = "Prevents you from being AFk kicked (may not work on all executors)", Tab = ThirdTab },
-    { "MainMenuPlay", Text = "Auto click play", Tooltip = "Automatically clicks \"PLAY\" when on the main menu", Tab = ThirdTab },
-    { "AutoJoinDungeon", Text = "Auto join dungeon", Tooltip = "Automatically join a nightmare dungeon if available", Tab = ThirdTab },
-    { "MobESPToggle", Text = "Mob ESP", Tooltip = "Adds a highlight to mobs", Tab = ThirdTab },
-    { "NoclipCameraToggle", Text = "Noclip camera", Tooltip = "Allows your camera to clip through walls", Tab = ThirdTab },
-    { "DisableAutoJumpToggle", Text = "Disable autojump", Tooltip = "Prevents you from auto-jumping on mobile devices", Tab = ThirdTab },
-    { "RemoveOtherPlayersToggle", Text = "Remove other players", Tooltip = "Removes all other players including their pets", Tab = FourthTab },
-    { "DisableRenderingToggle", Text = "Disable rendering", Tooltip = "Sigificantly reduces the load on your GPU by disabling 3d rendering", Tab = FourthTab },
-    { "PreventEffectsToggle", Text = "Don't render new effects", Tooltip = "Stops the game from rendering new effects such as projectiles!\nDO NOT USE IF PLAYING NORMALLY", Tab = FourthTab },
-    { "PreventMobToggle", Text = "Don't render new models", Tooltip = "Stops the game from rendering most new models your game hasn't already rendered", Tab = FourthTab }
+    { "MobCameraToggle", Text = "鏡頭跟隨怪物", Tooltip = "讓鏡頭跟隨目前鎖定的怪物。", Tab = FirstTab },
+    { "DamageNumbersToggle", Text = "隱藏傷害數字", Tooltip = "不再顯示傷害數字。", Tab = FirstTab },
+    { "DamageFlashToggle", Text = "隱藏受擊紅光", Tooltip = "隱藏怪物受傷時的紅色閃光。", Tab = FirstTab },
+    { "DeathEffectToggle", Text = "隱藏死亡特效", Tooltip = "不再顯示死亡特效。", Tab = FirstTab },
+    { "KnockdownToggle", Text = "停用擊倒效果", Tooltip = "避免角色受到擊倒狀態影響；其他玩家仍可能看到狀態變化。", Tab = FirstTab },
+    { "ShowEndTimeToggle", Text = "顯示通關時間", Tooltip = "通關地下城後顯示完成時間。", Tab = FirstTab },
+    { "WaystoneToggle", Text = "最近的傳送石", Tooltip = "隱藏最近傳送石的圖示。", Tab = SecondTab },
+    { "MissionObjectiveToggle", Text = "任務目標", Tooltip = "隱藏畫面上的任務目標提示。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "MissionObjective" },
+    { "BossBarToggle", Text = "Boss 血條", Tooltip = "隱藏 Boss 血條。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "BossHealthbar" },
+    { "PlayerHotbarToggle", Text = "快捷技能列", Tooltip = "隱藏生命值與技能快捷列。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "Hotbar" },
+    { "MobilePlayerSkills", Text = "手機技能按鈕", Tooltip = "隱藏手機版技能按鈕。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "TouchInput" },
+    { "MainGuiToggle", Text = "活動圖示", Tooltip = "隱藏活動圖示。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "MainGui" },
+    { "HideMenuToggle", Text = "遊戲選單", Tooltip = "隱藏遊戲內的選單介面。", Tab = SecondTab, AttachedFunction = ToggleMenu, FunctionValue = "Menu" },
+    { "DevKickToggle", Text = "開發者加入時離開", Tooltip = "開發人員加入伺服器時，自動離開遊戲。", Tab = ThirdTab },
+    { "ProfilerToggle", Text = "顯示帳號資訊", Tooltip = "顯示目前帳號的基本資訊。", Tab = ThirdTab },
+    { "AFKToggle", Text = "防止閒置斷線", Tooltip = "避免長時間閒置被踢出；部分執行環境可能不支援。", Tab = ThirdTab },
+    { "MainMenuPlay", Text = "自動點擊開始", Tooltip = "在主選單自動點擊「開始遊戲」。", Tab = ThirdTab },
+    { "AutoJoinDungeon", Text = "自動加入地下城", Tooltip = "有可加入的夢魘地下城時自動加入。", Tab = ThirdTab },
+    { "MobESPToggle", Text = "怪物高亮 (ESP)", Tooltip = "高亮標示怪物。", Tab = ThirdTab },
+    { "NoclipCameraToggle", Text = "鏡頭穿牆", Tooltip = "允許鏡頭穿過牆面。", Tab = ThirdTab },
+    { "DisableAutoJumpToggle", Text = "停用自動跳躍", Tooltip = "在手機裝置停用自動跳躍。", Tab = ThirdTab },
+    { "RemoveOtherPlayersToggle", Text = "隱藏其他玩家", Tooltip = "在本機隱藏其他玩家與寵物。", Tab = FourthTab },
+    { "DisableRenderingToggle", Text = "關閉 3D 畫面渲染", Tooltip = "停用 3D 畫面渲染，以大幅降低顯示卡負載。", Tab = FourthTab },
+    { "PreventEffectsToggle", Text = "不顯示新特效", Tooltip = "停止渲染新出現的特效（例如投射物）！\n正常遊玩時請勿啟用。", Tab = FourthTab },
+    { "PreventMobToggle", Text = "不顯示新模型", Tooltip = "停止顯示大部分尚未載入的新模型。", Tab = FourthTab }
 })
     FirstTab:AddDivider({Margin = -5})
 local rWalkspeedManager
 FirstTab:AddSlider("WalkspeedSlider", {
-    Text = "Change walkspeed",
+    Text = "修改移動速度",
     Default = 28,
     Min = 28,
     Max = 200,
     Rounding = 0,
-    Tooltip = "Does exactly what you think it does",
+    Tooltip = "變更角色的移動速度。",
     Callback = function(ChangedValue)
         if SV.CanRequire then
             if not rWalkspeedManager then
@@ -4864,10 +4864,10 @@ FirstTab:AddSlider("WalkspeedSlider", {
 })
     ThirdTab:AddDivider({Margin = -5})
 ThirdTab:AddInput("ChangeClassColor", {
-    Text = "Change class colors",
+    Text = "修改職業技能顏色",
     Default = "",
     Placeholder = "FFFFFF",
-    Tooltip = "Changes the colors of your classes attacks on your client only",
+    Tooltip = "只變更自己畫面上職業攻擊的顏色。",
     Callback = function(ChangedValue)
         if IsDungeon or IsWorld then
             LocalPlayer:SetAttribute("ClassColor", ChangedValue)
@@ -4876,7 +4876,7 @@ ThirdTab:AddInput("ChangeClassColor", {
 })
     FourthTab:AddDivider({Margin = -5})
 FourthTab:AddSlider("FPSSlider", {
-    Text = "Change FPS",
+    Text = "調整 FPS 上限",
     Default = 60,
     Min = 20,
     Max = 240,
@@ -4891,17 +4891,17 @@ end -- for unloaded miscellaneous
 
 if not SV.DiscordTab then -- for unloaded discord tab
 local DiscTab = Window:AddTab({
-    Name = "Discord",
+    Name = "Discord 社群",
     Icon = "rbxasset://textures/ui/LuaApp/ExternalSite/discord@3x.png"
 })
 local LeftTab = DiscTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
-    local SecondTab = LeftTab:AddTab("Settings")
+    local FirstTab = LeftTab:AddTab("主要")
+    local SecondTab = LeftTab:AddTab("設定")
 local RightTab = DiscTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = RightTab:AddTab("Join the discord")
+    local ThirdTab = RightTab:AddTab("加入 Discord")
 
 FirstTab:AddInput("WebhookLinkInput", {
-    Text = "Webhook link",
+    Text = "Webhook 網址",
     Default = "",
     Placeholder = "https://discord.com/api/webhooks/",
     Callback = function(ChangedValue)
@@ -4922,13 +4922,13 @@ local function ToggleValue(ChangedValue, ToggleValue)
 end
 
 CreateToggles({
-    { "DungeonLoggerToggle", Text = "Log dungeons", Tooltip = "Send a message to the webhook provided going over the details of the dungeon after it's finished", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "DungeonPing" },
-    { "PerkPingToggle", Text = "Ping for perk drops", Tooltip = "Sends a ping to the webhook provided if you've received an item with a perk you are wanting to keep", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "PerkPing" },
-    { "ClassPingToggle", Text = "Ping for class mastery", Tooltip = "Sends a ping to the webhook provided once you've unlocked the Mastery Class for the class you're currently using if one is available", Tab = FirstTab },
-    { "NightmarePingToggle", Text = "Ping for nightmare cap", Tooltip = "Sends a ping to the webhook provided once you've reached your limits on Nightmare Dungeon clears", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "NightmarePing" },
-    { "GuildPingToggle", Text = "Ping for guild cap", Tooltip = "Sends a ping to the webhook provided once you've reached your point limits on Guild Points", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "GuildPing" },
-    { "EventBossPingToggle", Text = "Ping for event boss cap", Tooltip = "Sends a ping to the webhook provided once you've reached your limits on event boss clears", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "EventPing" },
-    { "ShowPlayersToggle", Text = "Party member details", Tooltip = "Shows everyone inside of the party instead of only showing the number of players in the party", Tab = SecondTab }
+    { "DungeonLoggerToggle", Text = "記錄地下城", Tooltip = "地下城結束時，將通關資訊傳送到設定的 Webhook。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "DungeonPing" },
+    { "PerkPingToggle", Text = "詞條掉落時通知", Tooltip = "獲得含有指定保留詞條的物品時，傳送 Webhook 通知。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "PerkPing" },
+    { "ClassPingToggle", Text = "職業精通時通知", Tooltip = "解鎖目前職業的精通職業後，傳送 Webhook 通知。", Tab = FirstTab },
+    { "NightmarePingToggle", Text = "夢魘次數達上限時通知", Tooltip = "夢魘地下城通關次數達上限時，傳送 Webhook 通知。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "NightmarePing" },
+    { "GuildPingToggle", Text = "公會積分達上限時通知", Tooltip = "公會積分達到上限時，傳送 Webhook 通知。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "GuildPing" },
+    { "EventBossPingToggle", Text = "活動 Boss 次數達上限時通知", Tooltip = "活動 Boss 擊殺次數達上限時，傳送 Webhook 通知。", Tab = FirstTab, AttachedFunction = ToggleValue, FunctionValue = "EventPing" },
+    { "ShowPlayersToggle", Text = "顯示隊伍成員詳情", Tooltip = "顯示隊伍中每位成員的資訊，而不只是人數。", Tab = SecondTab }
 })
 SecondTab:AddDropdown("PingDropdown", {
     Values = {
@@ -4937,7 +4937,7 @@ SecondTab:AddDropdown("PingDropdown", {
         ["@everyone"] = "@everyone"
     },
     Multi = false,
-    Text = "Ping options",
+    Text = "通知提及方式",
     AllowNull = false,
     Default = "@everyone",
     Callback = function(ChangedValue)
@@ -4945,12 +4945,12 @@ SecondTab:AddDropdown("PingDropdown", {
     end
 })
 SecondTab:AddButton({
-    Text = "Send test message",
-    Tooltip = "Useful for checking if your webhook provided is working properly",
+    Text = "傳送測試訊息",
+    Tooltip = "確認所填入的 Webhook 是否能正常運作。",
     DoubleClick = true,
     Func = function()
         if not request then
-            Library:Notify("Your executor doesn't allow requests", 5)
+            Library:Notify("目前執行環境不允許發送請求", 5)
         end
         pcall(function()
             local MessageContent = {
@@ -4961,16 +4961,16 @@ SecondTab:AddButton({
         end)
     end
 })
-ThirdTab:AddLabel("if you wish to get news about <font color='#33FF33'>updates</font> and <font color='#33FF33'>changes</font> to the script, or <font color='#ff3333'>report issues</font>, then consider joining the <font color='#5650F6'>discord</font>!", true)
+ThirdTab:AddLabel("想了解腳本的<font color='#33FF33'>更新</font>與<font color='#33FF33'>變動</font>，或<font color='#ff3333'>回報問題</font>，歡迎加入作者的 <font color='#5650F6'>Discord</font>！", true)
 ThirdTab:AddButton({
-    Text = "Copy discord invite link",
-    Tooltip = "The invite will be copied to your devices clipboard!",
+    Text = "複製 Discord 邀請連結",
+    Tooltip = "邀請連結會複製到裝置剪貼簿。",
     Func = function()
         local Success, Result = pcall(function()
             setclipboard("https://discord.gg/bNWWpqFZbP")
         end)
         if not Success then
-            Library:Notify("Your executor doesn't allow this", 5)
+            Library:Notify("執行環境不允許此操作", 5)
         end
     end
 })
@@ -4983,37 +4983,37 @@ ConfigTab = Window:AddTab({
     Icon = "rbxassetid://9671045892"
 })
 local LeftTab = ConfigTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
-    local SecondTab = LeftTab:AddTab("debug")
+    local FirstTab = LeftTab:AddTab("主要")
+    local SecondTab = LeftTab:AddTab("除錯")
 
 CreateToggles({
-    { "HideGuiToggle", Text = "Hide menu when executed", Tab = FirstTab },
-    { "AutoScriptToggle", Text = "Auto execute script", Tab = FirstTab }
+    { "HideGuiToggle", Text = "執行後隱藏選單", Tab = FirstTab },
+    { "AutoScriptToggle", Text = "自動執行腳本", Tab = FirstTab }
 })
 
     FirstTab:AddDivider({Margin = -5})
 local LastUpdated
 FirstTab:AddDropdown("UnloadTabDropdown", {
     Values = {
-        ["GeneralTab"] = "General",
-        ["EventTab"] = "Events",
-        ["TradingTab"] = "Trading",
-        ["ClassesTab"] = "Classes",
-        ["InventoryTab"] = "Inventory",
-        ["DungeonsTab"] = "Dungeons",
-        ["GuildTab"] = "Guild",
-        ["ShopsTab"] = "Shops",
-        ["QuickMenusTab"] = "Quick menus",
-        ["MiscellaneousTab"] = "Miscellaneous",
-        ["DiscordTab"] = "Discord"
+        ["GeneralTab"] = "主要",
+        ["EventTab"] = "活動",
+        ["TradingTab"] = "交易",
+        ["ClassesTab"] = "職業",
+        ["InventoryTab"] = "背包",
+        ["DungeonsTab"] = "地下城",
+        ["GuildTab"] = "公會",
+        ["ShopsTab"] = "商店",
+        ["QuickMenusTab"] = "快速選單",
+        ["MiscellaneousTab"] = "額外進階功能",
+        ["DiscordTab"] = "Discord 社群"
     },
     Multi = true,
     AllowNull = true,
     Default = "",
     MaxVisibleDropdownItems = 5,
     Searchable = true,
-    Tooltip = "Any selected tab and its respective functions will not be loaded the next time the script is run. Unselecting a tab will allow it and its functions to load when the script is next ran.\n<font color='#ff3333'>IF YOU SELECT A TAB <u>NOTHING</u> FROM IT WILL BE LOADED AND IF YOU HAVE ANYTHING FROM THOSE TABS SAVED THEN ANY CHANGES TO THE CONFIG AFTER THEY ARE UNLOADED WILL NOT BE SAVED</font>",
-    Text = "Don't load tabs",
+    Tooltip = "選取的分頁及其功能，下次執行時將不會載入；取消選取後，下次才會重新載入。\n<font color=\'#ff3333\'>注意：被排除的分頁將<u>完全不載入</u>。若設定檔原本包含這些分頁，之後儲存其他設定時，可能無法保留它們的設定內容。</font>",
+    Text = "下次不載入的分頁",
     Callback = function(ChangedValue)
         if ChangedValue then
             local LastChanged = time()+2
@@ -5031,7 +5031,7 @@ FirstTab:AddDropdown("UnloadTabDropdown", {
 })
     FirstTab:AddDivider({Margin = -5})
 FirstTab:AddButton({
-    Text = "Stop script from executing",
+    Text = "停止下次自動執行",
     Func = function()
         print("running delete")
         local FileName = "JDRS/AutoExecute"
@@ -5039,14 +5039,14 @@ FirstTab:AddButton({
             delfile(FileName)
         end
         if EF.ClearQueue then
-            Library:Notify("Script will not be ran when you teleport. Hopefully you enjoyed using it without encountering any issues!\n -JDRS", 10)
+            Library:Notify("腳本在下次傳送時將不會自動執行。希望你使用愉快、沒有遇到問題！\n -JDRS", 10)
             EF.ClearQueue()
         end
     end
 })
 FirstTab:AddButton({
-    Text = "<font color='#ff3333'>Kill the script</font>",
-    Tooltip = "unloads the script and garbage collects it, if you see errors in the console after doing this you can ignore them.",
+    Text = "<font color='#ff3333'>終止腳本</font>",
+    Tooltip = "卸載腳本並清理記憶體；執行後若主控台出現相關錯誤，可先忽略。",
     DoubleClick = true,
     Func = function()
         KillSwitch = true
@@ -5054,24 +5054,24 @@ FirstTab:AddButton({
         print("JDRS: script has been unloaded")
     end
 })
-        SecondTab:AddLabel("These options should only be used when attempting to report issues with the script, they are intentionally vague as I know what they are referring to.", true)
+        SecondTab:AddLabel("以下為問題回報及開發除錯用途，一般使用者不需要操作。", true)
         SecondTab:AddDivider({Margin = -5})
         SecondTab:AddToggle("MobDebugToggle", {
-            Text = "print debugs",
-            Tooltip = "prints what the script does when a mob is created",
+            Text = "輸出偵錯訊息",
+            Tooltip = "顯示怪物生成時的腳本處理資訊。",
             Default = false,
             Callback = function(ChangedValue)
                 if ChangedValue and (IsDungeon or IsWorld) then
                     ISV.Debug = true
-                    Library:Notify("Tracked debugs will now be printed to the f9 console")
+                    Library:Notify("偵錯資訊將輸出到 F9 主控台")
                 else
                     ISV.Debug = nil
                 end
             end
         })
         SecondTab:AddButton({
-            Text = "print current mob",
-            Tooltip = "prints the mob that the script is currently trying to target",
+            Text = "顯示目前目標怪物",
+            Tooltip = "輸出目前正在鎖定的怪物。",
             Func = function()
                 if not IsDungeon then
                     warn("No mobs are being targeted, not in dungeon.")
@@ -5100,12 +5100,12 @@ FirstTab:AddButton({
                     MobString = MobString .. " Path: " ..tostring(TargetMob:GetFullName())
                 end
                 print(MobString)
-                Library:Notify("Printed current target to console")
+                Library:Notify("目前目標已輸出到主控台")
             end
         })
         SecondTab:AddButton({
-            Text = "print target mobs",
-            Tooltip = "prints the mobs the script is targeting",
+            Text = "顯示所有目標怪物",
+            Tooltip = "輸出目前所有鎖定的怪物。",
             Func = function()
                 if not IsDungeon then
                     warn("No mobs are being targeted, not in dungeon.")
@@ -5133,12 +5133,12 @@ FirstTab:AddButton({
                     MobString = MobString .."\n"
                 end
                 print(MobString)
-                Library:Notify("Printed targets to console")
+                Library:Notify("目標怪物已輸出到主控台")
             end
         })
         SecondTab:AddButton({
-            Text = "print target objects",
-            Tooltip = "prints the objects the script is trying to teleport",
+            Text = "顯示傳送目標物件",
+            Tooltip = "輸出腳本正在嘗試傳送的物件。",
             Func = function()
                 if not IsDungeon then
                     warn("No objects are being teleported, not in dungeon.")
@@ -5152,34 +5152,34 @@ FirstTab:AddButton({
                     ) 
                 end
                 print(ObjString)
-                Library:Notify("Printed objects to console")
+                Library:Notify("目標物件已輸出到主控台")
             end
         })
         SecondTab:AddButton({
-            Text = "open console",
-            Tooltip = "Opens the roblox console if you can't use the chat or don't want to.",
+            Text = "開啟主控台",
+            Tooltip = "不方便透過聊天開啟時，可直接開啟 Roblox 主控台。",
             Func = function()
                 StarterGui:SetCore("DevConsoleVisible", true)
             end
         })
         SecondTab:AddButton({
-            Text = "remote spy",
-            Tooltip = "Loads a script used to view remote events/remote functions.\n(if closed you might crash)\n\n<font color='#FCCE7E'>Script credits:</font> upio and deivid",
+            Text = "遠端事件檢視 (Remote Spy)",
+            Tooltip = "載入遠端事件／函式檢視工具。\n（關閉工具可能造成崩潰）\n\n<font color=\'#FCCE7E\'>工具作者：</font> upio、deivid",
             Func = function()
-                Library:Notify("Cobalt is being loaded")
+                Library:Notify("正在載入 Cobalt")
                 loadstring(game:HttpGet("https://gitlab.com/upio/cobalt/-/releases/permalink/latest/downloads/Cobalt.luau"))()
             end
         })
         SecondTab:AddButton({
-            Text = "dex",
-            Tooltip = "Loads a script used to view the games workspace.\n\n<font color='#FCCE7E'>Script credits:</font> chillz",
+            Text = "物件檢視器 (Dex)",
+            Tooltip = "載入遊戲場景物件檢視工具。\n\n<font color=\'#FCCE7E\'>工具作者：</font> chillz",
             Func = function()
-                Library:Notify("Dex is being loaded")
+                Library:Notify("正在載入 Dex")
                 loadstring(game:HttpGet("https://github.com/AZYsGithub/DexPlusPlus/releases/latest/download/out.lua"))()
             end
         })
         SecondTab:AddButton({
-            Text = "force restart dungeon",
+            Text = "強制重開地下城",
             DoubleClick = true,
             Func = function()
                 if IsDungeon then
@@ -5188,8 +5188,8 @@ FirstTab:AddButton({
             end
         })
         CompatibilityButton = SecondTab:AddButton({
-            Text = "check compatibility",
-            Tooltip = "Creates a bunch of text labels in place of this button showing compatibility of important functions used by the script",
+            Text = "檢查執行環境相容性",
+            Tooltip = "將此按鈕替換為多個檢查項目，顯示執行環境是否支援重要函式。",
             Func = function()
                     SecondTab:AddDivider({Margin = -5})
                 local RequireLabel = SecondTab:AddLabel("require: ?", true)
@@ -5199,53 +5199,53 @@ FirstTab:AddButton({
                 local NewcclosureLabel = SecondTab:AddLabel("newcclosure: ?", true)
                 local AutoInjectLabel = SecondTab:AddLabel("queueonteleport: ?", false)
                 local RequestLabel = SecondTab:AddLabel("request: ?", true)
-                local InvisTeleportLabel = SecondTab:AddLabel("invisible teleport: ?", true)
+                local InvisTeleportLabel = SecondTab:AddLabel("隱形傳送：？", true)
                 if SV.CanRequire then
-                    RequireLabel:SetText("require: <font color='#33ff33'>Yes</font>")
+                    RequireLabel:SetText("require: <font color='#33ff33'>是</font>")
                 else
-                    RequireLabel:SetText("require: <font color='#ff3333'>No</font>")
+                    RequireLabel:SetText("require: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.Hook then
-                    HookfunctionLabel:SetText("hookfunction: <font color='#33ff33'>Yes</font>")
+                    HookfunctionLabel:SetText("hookfunction: <font color='#33ff33'>是</font>")
                 else
-                    HookfunctionLabel:SetText("hookfunction: <font color='#ff3333'>No</font>")
+                    HookfunctionLabel:SetText("hookfunction: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.ClearHook then
-                    RestorefunctionLabel:SetText("restorefunction: <font color='#33ff33'>Yes</font>")
+                    RestorefunctionLabel:SetText("restorefunction: <font color='#33ff33'>是</font>")
                 else
-                    RestorefunctionLabel:SetText("restorefunction: <font color='#ff3333'>No</font>")
+                    RestorefunctionLabel:SetText("restorefunction: <font color='#ff3333'>否</font>")
                 end
 
                 if debug and debug.getupvalue then
-                    UpvalueLabel:SetText("getupvalue: <font color='#33ff33'>Yes</font>")
+                    UpvalueLabel:SetText("getupvalue: <font color='#33ff33'>是</font>")
                 else
-                    UpvalueLabel:SetText("getupvalue: <font color='#ff3333'>No</font>")
+                    UpvalueLabel:SetText("getupvalue: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.NewClosure then
-                    NewcclosureLabel:SetText("newcclosure: <font color='#33ff33'>Yes</font>")
+                    NewcclosureLabel:SetText("newcclosure: <font color='#33ff33'>是</font>")
                 else
-                    NewcclosureLabel:SetText("newcclosure: <font color='#ff3333'>No</font>")
+                    NewcclosureLabel:SetText("newcclosure: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.Queue then
-                    AutoInjectLabel:SetText("queueonteleport: <font color='#33ff33'>Yes</font>")
+                    AutoInjectLabel:SetText("queueonteleport: <font color='#33ff33'>是</font>")
                 else
-                    AutoInjectLabel:SetText("queueonteleport: <font color='#ff3333'>No</font>")
+                    AutoInjectLabel:SetText("queueonteleport: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.SendRequest then
-                    RequestLabel:SetText("request: <font color='#33ff33'>Yes</font>")
+                    RequestLabel:SetText("request: <font color='#33ff33'>是</font>")
                 else
-                    RequestLabel:SetText("request: <font color='#ff3333'>No</font>")
+                    RequestLabel:SetText("request: <font color='#ff3333'>否</font>")
                 end
 
                 if EF.Desync and EF.RaknetFunction.is_enabled() then
-                    InvisTeleportLabel:SetText("Can invisibly teleport: <font color='#33ff33'>Yes</font>", false)
+                    InvisTeleportLabel:SetText("可隱形傳送： <font color='#33ff33'>是</font>", false)
                 else
-                    InvisTeleportLabel:SetText("invisible teleport: <font color='#ff3333'>No</font>")
+                    InvisTeleportLabel:SetText("可隱形傳送： <font color='#ff3333'>否</font>")
                 end
                 CompatibilityButton:Destroy()
                 CompatibilityButton = nil
