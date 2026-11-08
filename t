@@ -3360,7 +3360,7 @@ SecondTab:AddInput("DailyEventInput", {
     end
 })
 local CoinSpinLabel = ThirdTab:AddLabel("Coin cost: 5", true)
-local SpinCount = 0
+local SpinCount = 1
 ThirdTab:AddInput("WheelSpinInput", {
     Text = "Wheel spin amount",
     Default = 1,
