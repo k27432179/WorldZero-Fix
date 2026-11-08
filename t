@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B3-test startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] B3-first-entry-diagnostic startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -481,20 +481,27 @@ local PlayerStandPart = nil
 local StandPartHeight = nil
 
 do
-    ConnectionTable["ConnectNewCharacter"] = LocalPlayer.CharacterAdded:Connect(function(NewCharacter)
-        PlayerCharacter = NewCharacter
-        PlayerRoot = NewCharacter:WaitForChild("HumanoidRootPart", math.huge)
-        PlayerCollider = NewCharacter:WaitForChild("Collider", math.huge)
+    local function BindCharacter(Character)
+        PlayerCharacter = Character
+        PlayerRoot = nil
+        PlayerCollider = nil
+        task.spawn(function()
+            local Root = Character:WaitForChild("HumanoidRootPart", math.huge)
+            local Collider = Character:WaitForChild("Collider", math.huge)
+            if PlayerCharacter == Character and LocalPlayer.Character == Character then
+                PlayerRoot = Root
+                PlayerCollider = Collider
+                print("[WZF][CHAR] ready; job:", game.JobId)
+            end
+        end)
+    end
+    ConnectionTable["ConnectNewCharacter"] = LocalPlayer.CharacterAdded:Connect(BindCharacter)
+    ConnectionTable["WZFCharacterRemoving"] = LocalPlayer.CharacterRemoving:Connect(function(Character)
+        if PlayerCharacter == Character then
+            PlayerCharacter, PlayerRoot, PlayerCollider = nil, nil, nil
+        end
     end)
-    if LocalPlayer.Character then
-        PlayerCharacter = LocalPlayer.Character
-    end
-    if PlayerCharacter and PlayerCharacter:FindFirstChild("HumanoidRootPart") then
-        PlayerRoot = PlayerCharacter.HumanoidRootPart
-    end
-    if PlayerCharacter and PlayerCharacter:FindFirstChild("Collider") then
-        PlayerCollider = PlayerCharacter.Collider
-    end
+    if LocalPlayer.Character then BindCharacter(LocalPlayer.Character) end
 end
 
 SetGlobal("setting up auto execute")
@@ -956,7 +963,9 @@ end
 
 SetGlobal("mob scanner")
 local function MobScanner()
+    SV.WZFScannerState = "waiting-character"
     CheckForCharacter()
+    SV.WZFScannerState = "initializing"
     if not IsMainMenu then
         if SV.CanRequire and EF.Hook and EF.NewClosure then
             local PlayerRemover = require(SMobs:WaitForChild("PlayerRemover", math.huge))
@@ -1184,7 +1193,9 @@ local function MobScanner()
                 for Index, Mob in Mobs:GetChildren() do
                     ValidMob(Mob)
                 end
+                SV.WZFScannerState = "running"
                 while not KillSwitch do
+                    SV.WZFScannerTick = os.clock()
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1394,7 +1405,9 @@ local function MobScanner()
                         ValidMob(Mob)
                     end)
                 end
+                SV.WZFScannerState = "running"
                 while not KillSwitch do
+                    SV.WZFScannerTick = os.clock()
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1473,6 +1486,8 @@ local function MobScanner()
             end
         end)
         if not Success then
+            SV.WZFScannerState = "error"
+            warn("[WZF][SCANNER] failed:", tostring(Result), "job:", game.JobId)
             SaveErrorToFile("MOB SCANNER", Result)
         end
     end
@@ -1607,8 +1622,11 @@ local function RejoinLastDungeon(DoRejoin)
                         and (IsTower or RejoinDifficulty == GetDifficulty()) then
                         print("[WZF] Rejoin ticket consumed at destination; no replay:", RejoinDungeon, "job:", game.JobId)
                     else
-                        KillSwitch = true
-                        ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                        if ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty) then
+                            KillSwitch = true
+                        else
+                            warn("[WZF][REJOIN] request not sent; KillSwitch unchanged; mission:", tostring(RejoinDungeon))
+                        end
                     end
                 end
             else
@@ -3203,7 +3221,6 @@ end
 CreateToggles({
     { "KillauraToggle", Text = "殺戮光環", Tab = FirstTab, AttachedFunction = ToggleSafeKillaura },
     { "SafeKillauraToggle", Text = "安全殺戮光環", Tab = FirstTab, AttachedFunction = ToggleKillaura },
-    { "StarbreakerManualToggle", Text = "Starbreaker 手動模式", Tooltip = "僅限 Starbreaker：暫停一般殺戮光環並恢復手動技能；關閉後，殺戮光環若仍開啟便恢復。安全殺戮光環、寵物與自動移動不受此選項控制。", Tab = FirstTab },
     { "AutoProgressToggle", Text = "自動跟隨怪物", Tab = FirstTab },
     { "CollectDropToggle", Text = "自動收集掉落物", Tab = ThirdTab },
     { "PetKillauraToggle", Text = "寵物殺戮光環", Tooltip = "容易被反作弊系統偵測到！使用風險自負！", Tab = ThirdTab },
@@ -5302,36 +5319,6 @@ if not SV.GeneralTab then
 SetGlobal("general tab functions")
 if IsDungeon then
     local KillauraChanged
-    local function IsStarbreakerManualMode()
-        return Toggles.StarbreakerManualToggle.Value
-            and LocalPlayer:GetAttribute("Class") == "Starbreaker"
-    end
-    local ManualSkillState
-    local function SyncManualSkillState(Disabled)
-        if not SV.CanRequire then
-            return false
-        end
-        if ManualSkillState and ManualSkillState.Disabled == Disabled
-            and ManualSkillState.Character == PlayerCharacter then
-            return true
-        end
-        local Actions = require(Client:WaitForChild("Actions", math.huge))
-        for _, Skill in { "Primary", "Skill1", "Skill2", "Skill3", "Ultimate" } do
-            Actions:SetSkillDisabled(Skill, Disabled)
-        end
-        ManualSkillState = { Disabled = Disabled, Character = PlayerCharacter }
-        return true
-    end
-    Toggles.StarbreakerManualToggle:OnChanged(function()
-        if SV.Killaura then
-            local Success, Result = pcall(function()
-                return SyncManualSkillState(not IsStarbreakerManualMode())
-            end)
-            if not Success or not Result then
-                Library:Notify("無法恢復或切換手動技能。請關閉殺戮光環並重新加入遊戲後測試。", 8)
-            end
-        end
-    end)
     Toggles.KillauraToggle:OnChanged(function(ChangedValue) -- killaura
         local TimeActivated = os.clock()
         KillauraChanged = CheckForCharacter(TimeActivated)
@@ -5349,9 +5336,15 @@ if IsDungeon then
                 ConnectionTable["ConnectClass"] = LocalPlayer:GetAttributeChangedSignal("Class"):Connect(function()
                     Class = GetPlayerClass()
                 end)
-                ManualSkillState = nil
-                if not SyncManualSkillState(not IsStarbreakerManualMode()) and IsStarbreakerManualMode() then
-                    Library:Notify("目前環境無法恢復手動技能，請關閉殺戮光環並重新加入遊戲後測試。", 8)
+                if SV.CanRequire then
+                    pcall(function()
+                        local Actions = require(Client:WaitForChild("Actions", math.huge))
+                        Actions:SetSkillDisabled("Primary", true)
+                        Actions:SetSkillDisabled("Skill1", true)
+                        Actions:SetSkillDisabled("Skill2", true)
+                        Actions:SetSkillDisabled("Skill3", true)
+                        Actions:SetSkillDisabled("Ultimate", true)
+                    end)
                 end
                 local LowerAttack = Vector3.new(0, 3, 0)
                 local CAttack = Remotes:WaitForChild("Combat_Attack", math.huge)
@@ -5397,9 +5390,6 @@ if IsDungeon then
                     end,
                     StarbreakerWaves = function(Skill, AttackPosition)
                         task.spawn(function()
-                            if not SV.Killaura or KillSwitch or ScriptUnloaded or IsStarbreakerManualMode() then
-                                return
-                            end
                             if IsBoss then
                                 local Status = PlayerCharacter:FindFirstChild("Status")
                                 if Status and Status:FindFirstChild("Starforge") then
@@ -5414,11 +5404,7 @@ if IsDungeon then
                     end
                 }
                 repeat
-                    SyncManualSkillState(not IsStarbreakerManualMode())
                     for _, Attack in Class.Skills do
-                        if not SV.Killaura or KillSwitch or ScriptUnloaded or IsStarbreakerManualMode() then
-                            break
-                        end
                         if CurrentMob then
                             local AttackCooldown = Attack.Cooldown
                             if time() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay+PlayerPing then
@@ -5454,14 +5440,12 @@ if IsDungeon then
                         end
                     end
                     task.wait()
-                until not SV.Killaura or KillSwitch or ScriptUnloaded
+                until not SV.Killaura
             end)
             if not Success then
                 SaveErrorToFile("KILLAURA", Result, SV.PlayerClass)
             end
         else
-            SV.Killaura = nil
-            ManualSkillState = nil
             if SV.CanRequire then
                 pcall(function()
                     local Actions = require(Client:WaitForChild("Actions", math.huge))
@@ -5552,6 +5536,7 @@ if IsDungeon then
     local CurrentCamera = Workspace.CurrentCamera
     local AutofarmChanged
     Toggles.AutoProgressToggle:OnChanged(function(ChangedValue)
+        print("[WZF][AF] callback:", tostring(ChangedValue), "job:", game.JobId)
         local TimeActivated = os.clock()
         AutofarmChanged = CheckForCharacter(TimeActivated)
         if TimeActivated ~= AutofarmChanged then
@@ -5562,12 +5547,15 @@ if IsDungeon then
             SV.Autofarm = true
             task.spawn(function()
                 local Success, Result = pcall(function()
+                    SV.WZFMoverState = "running"
                     local RotationAroundMob = 0
                     PlayerRoot.CanCollide = false
                     local LastCollider
                     local TeleportTween
                     while SV.Autofarm do
+                        SV.WZFMoverTick = os.clock()
                         if KillSwitch then
+                            SV.WZFMoverState = "stopped-killswitch"
                             break
                         end
                         if TempStop or HoldForRealTime or EventOverride then
@@ -5619,8 +5607,11 @@ if IsDungeon then
                         TeleportStandPart()
                         task.wait()
                     end
+                    if not SV.Autofarm then SV.WZFMoverState = "toggle-off" end
                 end)
                 if not Success then
+                    SV.WZFMoverState = "error"
+                    warn("[WZF][AF] mover failed:", tostring(Result), "job:", game.JobId)
                     SaveErrorToFile("MOB TELEPORT", Result)
                 end
             end)
@@ -5881,10 +5872,7 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if IsStarbreakerManualMode() then
-                        CombatTimer = 0
-                        task.wait(1)
-                    elseif not HoldForRealTime then
+                    if not HoldForRealTime then
                         task.wait(1)
                         local Healthproperties = PlayerCharacter:FindFirstChild("HealthProperties", true)
                         local OutOfCombat = Healthproperties and Healthproperties:FindFirstChild("OutOfCombat", true)
@@ -7754,6 +7742,7 @@ end
 
 SetGlobal("spawning function")
 if not IsMainMenu then
+    SV.Parties = ReturnChild(ReplicatedStorage, "Parties") -- ready before MobScanner can use it
     SpawnFunctions = {
         CheckForAvoidMobs, MobScanner, CheckPlayerPing,
         ConnectMissionFinished, ConnectTowerFinished,
@@ -7809,6 +7798,8 @@ end
 
 SetGlobal("clean up script")
 function CleanUpScript()
+    ScriptUnloaded = true
+    warn("[WZF][CLEANUP] invoked; job:", game.JobId)
     for Index in Toggles do
         local StringIndex = tostring(Index)
         if not string.find(StringIndex, "AutoScriptToggle") then
@@ -7964,6 +7955,25 @@ SaveManager = SaveScriptToFiles("https://raw.githubusercontent.com/deividcomsono
 print("Script took", FormatDecimal(os.clock() - ScriptLoadingStart), "seconds to fully load from execution time")
 ScriptLoadingStart = nil
 
+-- Independent observation only: never restarts workers or sends transitions.
+task.spawn(function()
+    while not ScriptUnloaded and _G.ScriptRunning do
+        task.wait(10)
+        if ScriptUnloaded or not SV then break end
+        local Count = 0
+        if ISV and ISV.MobTable then for _ in ISV.MobTable do Count += 1 end end
+        print("[WZF][HEARTBEAT]", "job", game.JobId,
+            "step", tostring(_G.ScriptStep), "toggle", tostring(Toggles and Toggles.AutoProgressToggle and Toggles.AutoProgressToggle.Value),
+            "autofarm", tostring(SV.Autofarm), "kill", tostring(KillSwitch),
+            "character", PlayerCharacter ~= nil, "root", PlayerRoot ~= nil, "collider", PlayerCollider ~= nil,
+            "scanner", tostring(SV.WZFScannerState), "scanAge", SV.WZFScannerTick and os.clock()-SV.WZFScannerTick or -1,
+            "mover", tostring(SV.WZFMoverState), "moveAge", SV.WZFMoverTick and os.clock()-SV.WZFMoverTick or -1,
+            "tempStop", tostring(TempStop), "hold", tostring(HoldForRealTime), "event", tostring(EventOverride),
+            "canTarget", tostring(CanTarget), "cachedMobs", Count, "folderMobs", Mobs and #Mobs:GetChildren() or -1,
+            "target", tostring(TeleportMob), "mission", tostring(ISV and ISV.MissionId),
+            "transition", tostring(SV.TransitionPending))
+    end
+end)
 SetGlobal("loading configs")
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
