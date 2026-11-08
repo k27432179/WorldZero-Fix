@@ -7903,6 +7903,7 @@ end
 SetGlobal("checking for old obsidian")
 if not ISV.IsMobile and EF.HideGui and not SV.BadExecutor then
     local MainUI = EF.HideGui():WaitForChild("Obsidian", math.huge):WaitForChild("Main", math.huge)
+    local UserInputService = game:GetService("UserInputService")
     ConnectionTable["obsidianguihandler"] = UserInputService.InputBegan:Connect(function(Key)
         if Key.KeyCode == Enum.KeyCode.Zero then
             if MainUI.Visible then
