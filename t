@@ -6,9 +6,17 @@ if tostring(game.GameId) ~= "985731078" then -- set to string or obfuscation can
 end
 
 if _G.ScriptRunning then
+    warn("[WZF] Startup blocked: script is already marked running. Previous step:", tostring(_G.ScriptStep))
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
+print("[WZF] B3-test startup:", game.PlaceId, "job:", game.JobId)
+-- Read-only startup watchdog: leaves gameplay and settings unchanged.
+task.delay(15, function()
+    if _G.ScriptRunning and _G.ScriptStep ~= "end" then
+        warn("[WZF] Startup has not finished after 15 seconds. Step:", tostring(_G.ScriptStep))
+    end
+end)
 
 local ScriptLoadingStart = os.clock()
 -- || CHECK STEP || - turn on to see scripts loading progress
@@ -493,7 +501,7 @@ SetGlobal("setting up auto execute")
 if EF.Queue then
     local FileName = "JDRS/AutoExecute"
     if isfile(FileName) then
-        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
+        EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/wzf-test/t"))()]])
         SV.AlreadyQueued = true
     end
 end
@@ -1522,25 +1530,58 @@ end
 
 SetGlobal("replay dungeon loop")
 local function ReplayDungeonLoop(Mission, Difficulty)
+    -- B2: only one destination and one request per running client.
+    -- A successful FireServer means the request was sent, NOT that the server
+    -- accepted the teleport. Never auto-retry without server confirmation.
+    if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
+        warn("[WZF] Invalid mission ID for replay:", tostring(Mission))
+        return false
+    end
+    if Mission == 49 then
+        Mission = 1
+    end
+    if not SV or ScriptUnloaded then
+        return false
+    end
+    if SV.TransitionPending then
+        warn("[WZF] Duplicate dungeon transition blocked. Pending:",
+            tostring(SV.TransitionMission), tostring(SV.TransitionDifficulty),
+            "new:", tostring(Mission), tostring(Difficulty))
+        return false
+    end
+
+    -- B3-test: identify which reload callback requested this transition.
+    if debug and type(debug.traceback) == "function" then
+        warn(debug.traceback("[WZF] Transition caller; job: " .. game.JobId, 2))
+    end
+
+    -- Set the lock before WaitForChild (which may yield).
+    SV.TransitionPending = true
+    SV.TransitionMission = Mission
+    SV.TransitionDifficulty = Difficulty
+
     local Success, Result = pcall(function()
-        if Mission == 49 then
-            Mission = 1
-        end
-        CleanUpScript()
-        while not ScriptUnloaded do
-            if ISV.Debug then
-                print(string.format(
-                    "Attempting to replay %* on difficulty %*",
-                    Mission, Difficulty
-                ))
-            end
-            Remotes:WaitForChild("Teleport_StartRaid", math.huge):FireServer(Mission, Difficulty)
-            task.wait(10)
-        end
+        local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
+        assert(Remote, "Teleport_StartRaid not available")
+        Remote:FireServer(Mission, Difficulty)
     end)
     if not Success then
-        SaveErrorToFile("REPLAY DUNGEON", Result)
+        warn("[WZF] Dungeon transition request failed:", tostring(Result))
+        if type(SaveErrorToFile) == "function" then
+            SaveErrorToFile("REPLAY DUNGEON", Result)
+        end
+        -- A local send failure may be retried manually.
+        SV.TransitionPending = false
+        SV.TransitionMission = nil
+        SV.TransitionDifficulty = nil
+        return false
     end
+
+    -- Keep locked until a fresh script instance in the destination server.
+    -- If the server rejects the transition silently, restart this test session
+    -- before another manual attempt; automatic re-send is deliberately disabled.
+    print("[WZF] Dungeon transition request sent once:", Mission, tostring(Difficulty), "job:", game.JobId)
+    return true
 end
 
 SetGlobal("rejoin last dungeon")
@@ -1561,19 +1602,18 @@ local function RejoinLastDungeon(DoRejoin)
                 local RejoinDifficulty = RejoinData.RejoinDifficulty
                 local RejoinTime = RejoinData.DisconnectedTime
                 delfile(RejoinFileName)
-                if RejoinTime + 300 > os.time() then
-                    KillSwitch = true
-                    ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                if type(RejoinTime) == "number" and RejoinTime <= os.time() and RejoinTime + 300 > os.time() then
+                    if IsDungeon and (RejoinDungeon == ISV.MissionId or RejoinDungeon == ISV.CurrentDungeonID)
+                        and (IsTower or RejoinDifficulty == GetDifficulty()) then
+                        print("[WZF] Rejoin ticket consumed at destination; no replay:", RejoinDungeon, "job:", game.JobId)
+                    else
+                        KillSwitch = true
+                        ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                    end
                 end
             else
                 delfile(RejoinFileName)
-                if IsEventDungeon then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, 1)
-                elseif IsDungeon then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, 6)
-                elseif IsTower then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, false)
-                end
+                warn("[WZF] Invalid rejoin ticket discarded; destination was not inferred")
             end
         end
         if DoRejoin then
@@ -1607,6 +1647,9 @@ end
 
 SetGlobal("restart dungeon")
 local function RestartDungeon(RestartBypass)
+    if SV.TransitionPending then
+        return -- A destination has already been requested in this client.
+    end
     if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then 
         return
     end
@@ -3106,7 +3149,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八",
+    Footer = "大哥，阿成，揚，99，有米，八八八.123",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -6971,11 +7014,13 @@ Toggles.AutoScriptToggle:OnChanged(function(ChangedValue) -- inject script
         end
         if not SV.AlreadyQueued then
             if EF.Queue then
-                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/t"))()]])
+                EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/wzf-test/t"))()]])
+                SV.AlreadyQueued = true
             end
         end
     else
         EF.ClearQueue()
+        SV.AlreadyQueued = false
     end
 end)
 end -- for unloaded config tab
@@ -7888,7 +7933,28 @@ SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
 SaveManager:SetFolder("JDRS/saved_configs")
 SaveManager:BuildConfigSection(ConfigTab)
-SaveManager:LoadAutoloadConfig()
+-- B3-test: config parsers may run after LoadAutoloadConfig returns.
+-- Listen to the setting itself, without waiting for long-running farm callbacks.
+do
+    local function ApplyMenuVisibility()
+        if ScriptUnloaded or not Library or Library.Unloaded then return end
+        local HideOnStart = Toggles.HideGuiToggle and Toggles.HideGuiToggle.Value == true
+        local ShouldShowMenu = not HideOnStart
+        if type(Library.Toggle) == "function" and type(Library.Toggled) == "boolean" then
+            if Library.Toggled ~= ShouldShowMenu then
+                Library:Toggle()
+            end
+            print("[WZF] Menu visibility applied; hidden:", HideOnStart, "job:", game.JobId)
+        else
+            warn("[WZF] Could not determine current menu visibility")
+        end
+    end
+    if Toggles.HideGuiToggle then
+        Toggles.HideGuiToggle:OnChanged(ApplyMenuVisibility)
+    end
+    SaveManager:LoadAutoloadConfig()
+    task.defer(ApplyMenuVisibility)
+end
 
 do
     SetGlobal("checking platform")
@@ -7901,24 +7967,9 @@ do
 end
 
 SetGlobal("checking for old obsidian")
-if not ISV.IsMobile and EF.HideGui and not SV.BadExecutor then
-    local MainUI = EF.HideGui():WaitForChild("Obsidian", math.huge):WaitForChild("Main", math.huge)
-    local UserInputService = game:GetService("UserInputService")
-    ConnectionTable["obsidianguihandler"] = UserInputService.InputBegan:Connect(function(Key)
-        if Key.KeyCode == Enum.KeyCode.Zero then
-            if MainUI.Visible then
-                MainUI.Visible = false
-            else
-                MainUI.Visible = true
-            end
-        end
-    end)
-end
-
-SetGlobal("toggle menu")
-if Toggles.HideGuiToggle.Value then
-    Library:Toggle()
-end
+-- The window already uses ToggleKeybind = Enum.KeyCode.Zero.
+-- Do not wait forever for a second GUI or register a duplicate key handler.
+print("[WZF] Legacy Obsidian input handler skipped")
 
 SetGlobal("leaderboard info set up")
 if IsWorld or IsDungeon then
@@ -7960,8 +8011,16 @@ if IsWorld or IsDungeon then
     end)
 end
 
-if GetLives() == 0 then
-    RestartDungeon()
+-- Event dungeons may report zero lives without being a failed run.
+-- Their completion/failure event remains responsible for automatic replay.
+if IsDungeon and not IsEventDungeon then
+    local StartupLives = GetLives()
+    print("[WZF] Startup lives check:", tostring(StartupLives), "job:", game.JobId)
+    if StartupLives == 0 then
+        RestartDungeon()
+    end
+elseif IsEventDungeon then
+    print("[WZF] Event startup lives replay skipped; waiting for mission result; job:", game.JobId)
 end
 
 SetGlobal("end")
