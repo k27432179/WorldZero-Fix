@@ -1529,24 +1529,56 @@ end
 
 SetGlobal("replay dungeon loop")
 local function ReplayDungeonLoop(Mission, Difficulty)
-    local Success, Result = pcall(function()
-        if Mission == 49 then
-            Mission = 1
+    -- Keep UI and remotes alive until Roblox actually switches server.
+    -- CleanUpScript() invalidates ISV / Remotes and must not run before FireServer.
+    if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
+        warn("[WZF] Invalid mission ID for replay:", tostring(Mission))
+        return
+    end
+    if Mission == 49 then
+        Mission = 1
+    end
+    if not SV then
+        return
+    end
+    if SV.TransitionPending and SV.TransitionMission == Mission
+        and SV.TransitionDifficulty == Difficulty then
+        return -- Already trying this destination.
+    end
+
+    -- A new destination invalidates retries targeting an older dungeon.
+    SV.ReplayGeneration = (SV.ReplayGeneration or 0) + 1
+    local Generation = SV.ReplayGeneration
+    SV.TransitionPending = true
+    SV.TransitionMission = Mission
+    SV.TransitionDifficulty = Difficulty
+
+    local MaxAttempts = 4
+    for Attempt = 1, MaxAttempts do
+        if not SV or ScriptUnloaded or SV.ReplayGeneration ~= Generation then
+            return
         end
-        CleanUpScript()
-        while not ScriptUnloaded do
-            if ISV.Debug then
-                print(string.format(
-                    "Attempting to replay %* on difficulty %*",
-                    Mission, Difficulty
-                ))
+        if ISV and ISV.Debug then
+            print("[WZF] Dungeon transition:", Mission, "difficulty:", tostring(Difficulty), "attempt:", Attempt)
+        end
+        local Success, Result = pcall(function()
+            local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
+            assert(Remote, "Teleport_StartRaid not available")
+            Remote:FireServer(Mission, Difficulty)
+        end)
+        if not Success then
+            warn("[WZF] Dungeon transition request failed:", tostring(Result))
+            if type(SaveErrorToFile) == "function" then
+                SaveErrorToFile("REPLAY DUNGEON", Result)
             end
-            Remotes:WaitForChild("Teleport_StartRaid", math.huge):FireServer(Mission, Difficulty)
-            task.wait(10)
         end
-    end)
-    if not Success then
-        SaveErrorToFile("REPLAY DUNGEON", Result)
+        task.wait(10) -- Allow server time to accept the transition.
+    end
+    if SV and SV.ReplayGeneration == Generation then
+        SV.TransitionPending = false
+        SV.TransitionMission = nil
+        SV.TransitionDifficulty = nil
+        warn("[WZF] Dungeon transition not confirmed after 4 attempts; retry lock released")
     end
 end
 
@@ -3113,7 +3145,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
+    Footer = "大哥，阿成，揚，99，有米，八八八",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
