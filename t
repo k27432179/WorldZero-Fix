@@ -6,9 +6,16 @@ if tostring(game.GameId) ~= "985731078" then -- set to string or obfuscation can
 end
 
 if _G.ScriptRunning then
+    warn("[WZF] Startup blocked: script is already marked running. Previous step:", tostring(_G.ScriptStep))
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
+-- Read-only startup watchdog: leaves gameplay and settings unchanged.
+task.delay(15, function()
+    if _G.ScriptRunning and _G.ScriptStep ~= "end" then
+        warn("[WZF] Startup has not finished after 15 seconds. Step:", tostring(_G.ScriptStep))
+    end
+end)
 
 local ScriptLoadingStart = os.clock()
 -- || CHECK STEP || - turn on to see scripts loading progress
@@ -3106,7 +3113,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -7901,23 +7908,20 @@ do
 end
 
 SetGlobal("checking for old obsidian")
-if not ISV.IsMobile and EF.HideGui and not SV.BadExecutor then
-    local MainUI = EF.HideGui():WaitForChild("Obsidian", math.huge):WaitForChild("Main", math.huge)
-    local UserInputService = game:GetService("UserInputService")
-    ConnectionTable["obsidianguihandler"] = UserInputService.InputBegan:Connect(function(Key)
-        if Key.KeyCode == Enum.KeyCode.Zero then
-            if MainUI.Visible then
-                MainUI.Visible = false
-            else
-                MainUI.Visible = true
-            end
-        end
-    end)
-end
+-- The window already uses ToggleKeybind = Enum.KeyCode.Zero.
+-- Do not wait forever for a second GUI or register a duplicate key handler.
+print("[WZF] Legacy Obsidian input handler skipped")
 
 SetGlobal("toggle menu")
-if Toggles.HideGuiToggle.Value then
-    Library:Toggle()
+local HideOnStart = Toggles.HideGuiToggle and Toggles.HideGuiToggle.Value == true
+local ShouldShowMenu = not HideOnStart
+if Library and type(Library.Toggle) == "function" and type(Library.Toggled) == "boolean" then
+    if Library.Toggled ~= ShouldShowMenu then
+        Library:Toggle()
+    end
+    print("[WZF] Menu setup complete; hidden:", HideOnStart)
+else
+    warn("[WZF] Could not determine current menu visibility; manual toggle may be needed")
 end
 
 SetGlobal("leaderboard info set up")
