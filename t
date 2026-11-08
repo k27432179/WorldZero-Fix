@@ -3367,30 +3367,20 @@ ThirdTab:AddInput("WheelSpinInput", {
     Placeholder = "1",
     Tooltip = "If you enter more spins than you have in coins then the script will spin the wheel as many times as possible",
     Callback = function(ChangedValue)
-    local raw = tostring(ChangedValue)
-    local cleaned = raw:gsub(",", "")
-    local amount = tonumber(cleaned)
+        -- Obsidian inputs may return the text "10000" rather than number 10000.
+        local raw = tostring(ChangedValue)
+        local cleaned = raw:gsub(",", "")
+        local amount = tonumber(cleaned)
 
-    if amount
-        and amount >= 1
-        and amount < math.huge
-        and amount % 1 == 0 then
-
-        SpinCount = amount
-
-        local totalCost = amount * 5
-
-        CoinSpinLabel:SetText(
-            "Coin cost: " .. FormatNumber(totalCost)
-        )
-    else
-        SpinCount = 0
-
-        CoinSpinLabel:SetText(
-            "Coin cost: <font color=\"rgb(255, 0, 0)\">invalid number</font>"
-        )
+        if amount and amount >= 1 and amount < math.huge and amount % 1 == 0 then
+            SpinCount = amount
+            local totalCost = amount * 5
+            CoinSpinLabel:SetText("Coin cost: " .. FormatNumber(totalCost))
+        else
+            SpinCount = 0
+            CoinSpinLabel:SetText("Coin cost: <font color=\"rgb(255, 0, 0)\">invalid number</font>")
+        end
     end
-end
 })
 ThirdTab:AddButton({
     Text = "Spin wheel",
@@ -7006,8 +6996,8 @@ end
 SetGlobal("get attack data")
 if IsDungeon and not KillSwitch then
     local Success, Result = pcall(function()
-        ClassSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/c", "C", 5.4)
-        PetSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/p", "P", 4.5)
+        ClassSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/c", "C", 5.5)
+        PetSkills = SaveScriptToFiles("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/main/p", "P", 4.6)
         if ClassSkills and PetSkills then
             Class = GetPlayerClass()
             if Class ~= nil then
