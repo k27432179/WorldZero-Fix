@@ -3132,11 +3132,11 @@ if IsMainMenu or IsWorld then
     })
 end
 local LeftTab = GenTab:AddLeftTabbox("Left Tabbox")
-    local FirstTab = LeftTab:AddTab("Main")
-    local SecondTab = LeftTab:AddTab("Settings")
+    local FirstTab = LeftTab:AddTab("主要")
+    local SecondTab = LeftTab:AddTab("設定")
 local RightTab = GenTab:AddRightTabbox("Right Tabbox")
-    local ThirdTab = RightTab:AddTab("Extra")
-    local FourthTab = RightTab:AddTab("Settings")
+    local ThirdTab = RightTab:AddTab("額外")
+    local FourthTab = RightTab:AddTab("設定")
 
 local function ToggleKillaura(ChangedValue)
     if ChangedValue then
@@ -3158,14 +3158,14 @@ local function ToggleSafeKillaura(ChangedValue)
 end
 
 CreateToggles({
-    { "KillauraToggle", Text = "Killaura", Tab = FirstTab, AttachedFunction = ToggleSafeKillaura },
-    { "SafeKillauraToggle", Text = "Safe killaura", Tab = FirstTab, AttachedFunction = ToggleKillaura },
-    { "AutoProgressToggle", Text = "Autofarm", Tab = FirstTab },
-    { "CollectDropToggle", Text = "Auto collect drops", Tab = ThirdTab },
-    { "PetKillauraToggle", Text = "Pet killaura", Tooltip = "Vulnerable to getting detected by anticheat changes! Use at your own risk!", Tab = ThirdTab },
-    { "RestartStuckToggle", Text = "Rejoin if stuck", Tooltip = "if you stop doing damage for a long enough period of time this toggle will assume you're stuck and attempt to restart the dungeon.", Tab = ThirdTab },
-    { "DodgeLethalToggle", Text = "Dodge lethal damage", Tooltip = "Melee classes only. Some attacks may automatically be dodged even when turned off.", Tab = ThirdTab },
-    { "AutoPrestigeToggle", Text = "Auto prestige", Tooltip = "When you reach level 160 the script will teleport you to world 1, prestige, and then go to crabby crusade.", Tab = ThirdTab }
+    { "KillauraToggle", Text = "殺戮光環", Tab = FirstTab, AttachedFunction = ToggleSafeKillaura },
+    { "SafeKillauraToggle", Text = "安全殺戮光環", Tab = FirstTab, AttachedFunction = ToggleKillaura },
+    { "AutoProgressToggle", Text = "自動跟隨怪物", Tab = FirstTab },
+    { "CollectDropToggle", Text = "自動收集掉落物", Tab = ThirdTab },
+    { "PetKillauraToggle", Text = "寵物殺戮光環", Tooltip = "容易被反作弊系統偵測到！使用風險自負！", Tab = ThirdTab },
+    { "RestartStuckToggle", Text = "卡住自動重啟", Tooltip = "如果你長時間停止造成傷害，這個開關會認為你被困住了，並嘗試重新開始地牢。", Tab = ThirdTab },
+    { "DodgeLethalToggle", Text = "躲避致命傷害", Tooltip = "限近戰職業。即使關閉此功能，部分攻擊仍可能自動閃避。", Tab = ThirdTab },
+    { "AutoPrestigeToggle", Text = "自動轉生", Tooltip = "當你達到 160 級時，腳本會將你傳送到世界 1，進行聲望提升，然後進入螃蟹十字軍。", Tab = ThirdTab }
 })
 SecondTab:AddLabel("Account for ping", true)
 SecondTab:AddSlider("PingSlider", {
