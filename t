@@ -3106,7 +3106,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "賺錢不易，奶粉錢靠大家，揚",
+    Footer = "大哥，阿成，揚，99，有米",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
