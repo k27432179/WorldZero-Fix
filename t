@@ -3367,14 +3367,30 @@ ThirdTab:AddInput("WheelSpinInput", {
     Placeholder = "1",
     Tooltip = "If you enter more spins than you have in coins then the script will spin the wheel as many times as possible",
     Callback = function(ChangedValue)
-        if typeof(ChangedValue) == "number" then
-            CoinSpinLabel:SetText("Coin cost: " ..FormatNumber(ChangedValue*5))
-            SpinCount = ChangedValue
-        else
-            SpinCount = 0
-            CoinSpinLabel:SetText("Coin cost: <font color=\"rgb(255, 0, 0)\">invalid number</font>")
-        end
+    local raw = tostring(ChangedValue)
+    local cleaned = raw:gsub(",", "")
+    local amount = tonumber(cleaned)
+
+    if amount
+        and amount >= 1
+        and amount < math.huge
+        and amount % 1 == 0 then
+
+        SpinCount = amount
+
+        local totalCost = amount * 5
+
+        CoinSpinLabel:SetText(
+            "Coin cost: " .. FormatNumber(totalCost)
+        )
+    else
+        SpinCount = 0
+
+        CoinSpinLabel:SetText(
+            "Coin cost: <font color=\"rgb(255, 0, 0)\">invalid number</font>"
+        )
     end
+end
 })
 ThirdTab:AddButton({
     Text = "Spin wheel",
