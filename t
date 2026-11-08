@@ -3119,7 +3119,7 @@ Window:SetCornerRadius(20)
 if not SV.GeneralTab then -- for unloaded general tab
 SetGlobal("creating general tab")
 local GenTab = Window:AddTab({
-    Name = "General",
+    Name = "主要",
     Icon = "rbxassetid://9671045892"
 })
 if IsMainMenu or IsWorld then
@@ -3273,7 +3273,7 @@ local EventTabIconTable = {
     [12] = "rbxassetid://8202463897"
 }
 local EventTab = Window:AddTab({
-    Name = "Events",
+    Name = "活動",
     Icon = EventTabIconTable[os.date("*t").month]
 })
 local LeftTab = EventTab:AddLeftTabbox("Left Tabbox")
@@ -3723,7 +3723,7 @@ end -- for unloaded event tab
 if not SV.TradingTab then -- for unloaded trading tab
 SetGlobal("trading tab")
 local TradeTab = Window:AddTab({
-    Name = "Trading",
+    Name = "交易",
     Icon = "rbxassetid://9671046601"
 })
 local LeftTab = TradeTab:AddLeftTabbox("Left Tabbox")
@@ -3894,7 +3894,7 @@ end -- for unloaded trading tab
 if not SV.ClassesTab then -- for unloaded classes tab
 SetGlobal("creating class tab")
 local ClassTab = Window:AddTab({
-    Name = "Classes",
+    Name = "職業",
     Icon = "rbxassetid://9671047048"
 })
 LeftTab = ClassTab:AddLeftTabbox("Left Tabbox")
@@ -3973,7 +3973,7 @@ end -- for unloaded classes tab
 if not SV.InventoryTab then -- for unloaded inventory tab
 SetGlobal("creating inventory tab")
 local InventoryTab = Window:AddTab({
-    Name = "Inventory",
+    Name = "背包存貨",
     Icon = "rbxassetid://9671046778"
 })
 local LeftTab = InventoryTab:AddLeftTabbox("Left Tabbox")
@@ -4272,7 +4272,7 @@ SetGlobal("creating dungeon tab")
 
 if not SV.DungeonsTab then -- for unloaded classes tab
 local DungeonTab = Window:AddTab({
-    Name = "Dungeons",
+    Name = "地下城",
     Icon = "rbxassetid://18739736091"
 })
 local LeftTab = DungeonTab:AddLeftTabbox("Left Tabbox")
@@ -4413,7 +4413,7 @@ end -- for unloaded inventory tab
 if not SV.GuildTab then -- for unloaded guild tab
 SetGlobal("creating guild tab")
 local GuildTab = Window:AddTab({
-    Name = "Guild",
+    Name = "公會",
     Icon = "rbxassetid://9671046895"
 })
 local GuildTabLeft = GuildTab:AddLeftTabbox("Left Tabbox")
@@ -4618,7 +4618,7 @@ end -- for unloaded guild tab
 if not SV.ShopsTab then -- for unloaded shops tab
 SetGlobal("creating shop tab")
 local ShopTab = Window:AddTab({
-    Name = "Shops",
+    Name = "商店",
     Icon = "rbxassetid://12281229733"
 })
 local LeftTab = ShopTab:AddLeftTabbox("Left Tabbox")
@@ -4747,7 +4747,7 @@ end -- for unloaded shops tab
 if not SV.QuickMenusTab then -- for unloaded quick menus tab
 SetGlobal("creating quick menu tab")
 local OpenMenuTab = Window:AddTab({
-    Name = "Quick menus",
+    Name = "快速選單",
     Icon = "rbxassetid://13534579488"
 })
 local LeftTab = OpenMenuTab:AddLeftTabbox("Left Tabbox")
@@ -4771,7 +4771,7 @@ end -- for unloaded quick menus tab
 
 if not SV.MiscellaneousTab then -- for unloaded miscellaneous
 local MiscTab = Window:AddTab({
-    Name = "Miscellaneous",
+    Name = "額外進階功能",
     Icon = "rbxassetid://4801326994"
 })
 local LeftTab = MiscTab:AddLeftTabbox("Left Tabbox")
@@ -4979,7 +4979,7 @@ end -- for unloaded discord tab
 if not SV.ConfigurationTab then -- for unloaded config tab
 SetGlobal("creating config tab")
 ConfigTab = Window:AddTab({
-    Name = "Configurations",
+    Name = "設定",
     Icon = "rbxassetid://9671045892"
 })
 local LeftTab = ConfigTab:AddLeftTabbox("Left Tabbox")
