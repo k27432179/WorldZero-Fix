@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B3-test startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] B3-first-entry-diagnostic startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -481,20 +481,27 @@ local PlayerStandPart = nil
 local StandPartHeight = nil
 
 do
-    ConnectionTable["ConnectNewCharacter"] = LocalPlayer.CharacterAdded:Connect(function(NewCharacter)
-        PlayerCharacter = NewCharacter
-        PlayerRoot = NewCharacter:WaitForChild("HumanoidRootPart", math.huge)
-        PlayerCollider = NewCharacter:WaitForChild("Collider", math.huge)
+    local function BindCharacter(Character)
+        PlayerCharacter = Character
+        PlayerRoot = nil
+        PlayerCollider = nil
+        task.spawn(function()
+            local Root = Character:WaitForChild("HumanoidRootPart", math.huge)
+            local Collider = Character:WaitForChild("Collider", math.huge)
+            if PlayerCharacter == Character and LocalPlayer.Character == Character then
+                PlayerRoot = Root
+                PlayerCollider = Collider
+                print("[WZF][CHAR] ready; job:", game.JobId)
+            end
+        end)
+    end
+    ConnectionTable["ConnectNewCharacter"] = LocalPlayer.CharacterAdded:Connect(BindCharacter)
+    ConnectionTable["WZFCharacterRemoving"] = LocalPlayer.CharacterRemoving:Connect(function(Character)
+        if PlayerCharacter == Character then
+            PlayerCharacter, PlayerRoot, PlayerCollider = nil, nil, nil
+        end
     end)
-    if LocalPlayer.Character then
-        PlayerCharacter = LocalPlayer.Character
-    end
-    if PlayerCharacter and PlayerCharacter:FindFirstChild("HumanoidRootPart") then
-        PlayerRoot = PlayerCharacter.HumanoidRootPart
-    end
-    if PlayerCharacter and PlayerCharacter:FindFirstChild("Collider") then
-        PlayerCollider = PlayerCharacter.Collider
-    end
+    if LocalPlayer.Character then BindCharacter(LocalPlayer.Character) end
 end
 
 SetGlobal("setting up auto execute")
@@ -956,7 +963,9 @@ end
 
 SetGlobal("mob scanner")
 local function MobScanner()
+    SV.WZFScannerState = "waiting-character"
     CheckForCharacter()
+    SV.WZFScannerState = "initializing"
     if not IsMainMenu then
         if SV.CanRequire and EF.Hook and EF.NewClosure then
             local PlayerRemover = require(SMobs:WaitForChild("PlayerRemover", math.huge))
@@ -1184,7 +1193,9 @@ local function MobScanner()
                 for Index, Mob in Mobs:GetChildren() do
                     ValidMob(Mob)
                 end
+                SV.WZFScannerState = "running"
                 while not KillSwitch do
+                    SV.WZFScannerTick = os.clock()
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1394,7 +1405,9 @@ local function MobScanner()
                         ValidMob(Mob)
                     end)
                 end
+                SV.WZFScannerState = "running"
                 while not KillSwitch do
+                    SV.WZFScannerTick = os.clock()
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1473,6 +1486,8 @@ local function MobScanner()
             end
         end)
         if not Success then
+            SV.WZFScannerState = "error"
+            warn("[WZF][SCANNER] failed:", tostring(Result), "job:", game.JobId)
             SaveErrorToFile("MOB SCANNER", Result)
         end
     end
@@ -1607,8 +1622,11 @@ local function RejoinLastDungeon(DoRejoin)
                         and (IsTower or RejoinDifficulty == GetDifficulty()) then
                         print("[WZF] Rejoin ticket consumed at destination; no replay:", RejoinDungeon, "job:", game.JobId)
                     else
-                        KillSwitch = true
-                        ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                        if ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty) then
+                            KillSwitch = true
+                        else
+                            warn("[WZF][REJOIN] request not sent; KillSwitch unchanged; mission:", tostring(RejoinDungeon))
+                        end
                     end
                 end
             else
@@ -3149,7 +3167,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號：V1.1",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -5518,6 +5536,7 @@ if IsDungeon then
     local CurrentCamera = Workspace.CurrentCamera
     local AutofarmChanged
     Toggles.AutoProgressToggle:OnChanged(function(ChangedValue)
+        print("[WZF][AF] callback:", tostring(ChangedValue), "job:", game.JobId)
         local TimeActivated = os.clock()
         AutofarmChanged = CheckForCharacter(TimeActivated)
         if TimeActivated ~= AutofarmChanged then
@@ -5528,12 +5547,15 @@ if IsDungeon then
             SV.Autofarm = true
             task.spawn(function()
                 local Success, Result = pcall(function()
+                    SV.WZFMoverState = "running"
                     local RotationAroundMob = 0
                     PlayerRoot.CanCollide = false
                     local LastCollider
                     local TeleportTween
                     while SV.Autofarm do
+                        SV.WZFMoverTick = os.clock()
                         if KillSwitch then
+                            SV.WZFMoverState = "stopped-killswitch"
                             break
                         end
                         if TempStop or HoldForRealTime or EventOverride then
@@ -5585,8 +5607,11 @@ if IsDungeon then
                         TeleportStandPart()
                         task.wait()
                     end
+                    if not SV.Autofarm then SV.WZFMoverState = "toggle-off" end
                 end)
                 if not Success then
+                    SV.WZFMoverState = "error"
+                    warn("[WZF][AF] mover failed:", tostring(Result), "job:", game.JobId)
                     SaveErrorToFile("MOB TELEPORT", Result)
                 end
             end)
@@ -7717,6 +7742,7 @@ end
 
 SetGlobal("spawning function")
 if not IsMainMenu then
+    SV.Parties = ReturnChild(ReplicatedStorage, "Parties") -- ready before MobScanner can use it
     SpawnFunctions = {
         CheckForAvoidMobs, MobScanner, CheckPlayerPing,
         ConnectMissionFinished, ConnectTowerFinished,
@@ -7772,6 +7798,8 @@ end
 
 SetGlobal("clean up script")
 function CleanUpScript()
+    ScriptUnloaded = true
+    warn("[WZF][CLEANUP] invoked; job:", game.JobId)
     for Index in Toggles do
         local StringIndex = tostring(Index)
         if not string.find(StringIndex, "AutoScriptToggle") then
@@ -7927,6 +7955,25 @@ SaveManager = SaveScriptToFiles("https://raw.githubusercontent.com/deividcomsono
 print("Script took", FormatDecimal(os.clock() - ScriptLoadingStart), "seconds to fully load from execution time")
 ScriptLoadingStart = nil
 
+-- Independent observation only: never restarts workers or sends transitions.
+task.spawn(function()
+    while not ScriptUnloaded and _G.ScriptRunning do
+        task.wait(10)
+        if ScriptUnloaded or not SV then break end
+        local Count = 0
+        if ISV and ISV.MobTable then for _ in ISV.MobTable do Count += 1 end end
+        print("[WZF][HEARTBEAT]", "job", game.JobId,
+            "step", tostring(_G.ScriptStep), "toggle", tostring(Toggles and Toggles.AutoProgressToggle and Toggles.AutoProgressToggle.Value),
+            "autofarm", tostring(SV.Autofarm), "kill", tostring(KillSwitch),
+            "character", PlayerCharacter ~= nil, "root", PlayerRoot ~= nil, "collider", PlayerCollider ~= nil,
+            "scanner", tostring(SV.WZFScannerState), "scanAge", SV.WZFScannerTick and os.clock()-SV.WZFScannerTick or -1,
+            "mover", tostring(SV.WZFMoverState), "moveAge", SV.WZFMoverTick and os.clock()-SV.WZFMoverTick or -1,
+            "tempStop", tostring(TempStop), "hold", tostring(HoldForRealTime), "event", tostring(EventOverride),
+            "canTarget", tostring(CanTarget), "cachedMobs", Count, "folderMobs", Mobs and #Mobs:GetChildren() or -1,
+            "target", tostring(TeleportMob), "mission", tostring(ISV and ISV.MissionId),
+            "transition", tostring(SV.TransitionPending))
+    end
+end)
 SetGlobal("loading configs")
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
