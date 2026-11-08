@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B2 startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] B3-test startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1550,6 +1550,11 @@ local function ReplayDungeonLoop(Mission, Difficulty)
         return false
     end
 
+    -- B3-test: identify which reload callback requested this transition.
+    if debug and type(debug.traceback) == "function" then
+        warn(debug.traceback("[WZF] Transition caller; job: " .. game.JobId, 2))
+    end
+
     -- Set the lock before WaitForChild (which may yield).
     SV.TransitionPending = true
     SV.TransitionMission = Mission
@@ -1597,19 +1602,18 @@ local function RejoinLastDungeon(DoRejoin)
                 local RejoinDifficulty = RejoinData.RejoinDifficulty
                 local RejoinTime = RejoinData.DisconnectedTime
                 delfile(RejoinFileName)
-                if RejoinTime + 300 > os.time() then
-                    KillSwitch = true
-                    ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                if type(RejoinTime) == "number" and RejoinTime <= os.time() and RejoinTime + 300 > os.time() then
+                    if IsDungeon and (RejoinDungeon == ISV.MissionId or RejoinDungeon == ISV.CurrentDungeonID)
+                        and (IsTower or RejoinDifficulty == GetDifficulty()) then
+                        print("[WZF] Rejoin ticket consumed at destination; no replay:", RejoinDungeon, "job:", game.JobId)
+                    else
+                        KillSwitch = true
+                        ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty)
+                    end
                 end
             else
                 delfile(RejoinFileName)
-                if IsEventDungeon then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, 1)
-                elseif IsDungeon then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, 6)
-                elseif IsTower then
-                    ReplayDungeonLoop(ISV.CurrentDungeonID, false)
-                end
+                warn("[WZF] Invalid rejoin ticket discarded; destination was not inferred")
             end
         end
         if DoRejoin then
@@ -3145,7 +3149,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
+    Footer = "大哥，阿成，揚，99，有米，八八八.123",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -7011,10 +7015,12 @@ Toggles.AutoScriptToggle:OnChanged(function(ChangedValue) -- inject script
         if not SV.AlreadyQueued then
             if EF.Queue then
                 EF.Queue([[loadstring(game:HttpGet("https://raw.githubusercontent.com/k27432179/WorldZero-Fix/wzf-test/t"))()]])
+                SV.AlreadyQueued = true
             end
         end
     else
         EF.ClearQueue()
+        SV.AlreadyQueued = false
     end
 end)
 end -- for unloaded config tab
@@ -7927,7 +7933,28 @@ SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
 SaveManager:SetFolder("JDRS/saved_configs")
 SaveManager:BuildConfigSection(ConfigTab)
-SaveManager:LoadAutoloadConfig()
+-- B3-test: config parsers may run after LoadAutoloadConfig returns.
+-- Listen to the setting itself, without waiting for long-running farm callbacks.
+do
+    local function ApplyMenuVisibility()
+        if ScriptUnloaded or not Library or Library.Unloaded then return end
+        local HideOnStart = Toggles.HideGuiToggle and Toggles.HideGuiToggle.Value == true
+        local ShouldShowMenu = not HideOnStart
+        if type(Library.Toggle) == "function" and type(Library.Toggled) == "boolean" then
+            if Library.Toggled ~= ShouldShowMenu then
+                Library:Toggle()
+            end
+            print("[WZF] Menu visibility applied; hidden:", HideOnStart, "job:", game.JobId)
+        else
+            warn("[WZF] Could not determine current menu visibility")
+        end
+    end
+    if Toggles.HideGuiToggle then
+        Toggles.HideGuiToggle:OnChanged(ApplyMenuVisibility)
+    end
+    SaveManager:LoadAutoloadConfig()
+    task.defer(ApplyMenuVisibility)
+end
 
 do
     SetGlobal("checking platform")
@@ -7943,18 +7970,6 @@ SetGlobal("checking for old obsidian")
 -- The window already uses ToggleKeybind = Enum.KeyCode.Zero.
 -- Do not wait forever for a second GUI or register a duplicate key handler.
 print("[WZF] Legacy Obsidian input handler skipped")
-
-SetGlobal("toggle menu")
-local HideOnStart = Toggles.HideGuiToggle and Toggles.HideGuiToggle.Value == true
-local ShouldShowMenu = not HideOnStart
-if Library and type(Library.Toggle) == "function" and type(Library.Toggled) == "boolean" then
-    if Library.Toggled ~= ShouldShowMenu then
-        Library:Toggle()
-    end
-    print("[WZF] Menu setup complete; hidden:", HideOnStart)
-else
-    warn("[WZF] Could not determine current menu visibility; manual toggle may be needed")
-end
 
 SetGlobal("leaderboard info set up")
 if IsWorld or IsDungeon then
@@ -7996,8 +8011,16 @@ if IsWorld or IsDungeon then
     end)
 end
 
-if GetLives() == 0 then
-    RestartDungeon()
+-- Event dungeons may report zero lives without being a failed run.
+-- Their completion/failure event remains responsible for automatic replay.
+if IsDungeon and not IsEventDungeon then
+    local StartupLives = GetLives()
+    print("[WZF] Startup lives check:", tostring(StartupLives), "job:", game.JobId)
+    if StartupLives == 0 then
+        RestartDungeon()
+    end
+elseif IsEventDungeon then
+    print("[WZF] Event startup lives replay skipped; waiting for mission result; job:", game.JobId)
 end
 
 SetGlobal("end")
