@@ -3167,7 +3167,7 @@ CreateToggles({
     { "DodgeLethalToggle", Text = "躲避致命傷害", Tooltip = "限近戰職業。即使關閉此功能，部分攻擊仍可能自動閃避。", Tab = ThirdTab },
     { "AutoPrestigeToggle", Text = "自動轉生", Tooltip = "當你達到 160 級時，腳本會將你傳送到世界 1，進行聲望提升，然後進入螃蟹十字軍。", Tab = ThirdTab }
 })
-SecondTab:AddLabel("Account for ping", true)
+SecondTab:AddLabel("帳戶延遲", true)
 SecondTab:AddSlider("PingSlider", {
     Text = "Ping",
     Suffix = "%",
@@ -3176,12 +3176,12 @@ SecondTab:AddSlider("PingSlider", {
     Max = 200,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Adds delay to when each attack is used based off your ping. May help reduce kicks.\nDOES NOT APPLY TO SAFE KILLAURA",
+    Tooltip = "根據您的網路延遲，增加每次攻擊的延遲時間。這可能有助於減少被踢出遊戲的情況。 \n不適用於安全殺戮光環",
     Callback = function(ChangedValue)
         PingMultiplier = ChangedValue / 100
     end
 })
-SecondTab:AddLabel("Killaura attack delay", true)
+SecondTab:AddLabel("殺戮光環攻擊延遲", true)
 SecondTab:AddSlider("AttackDelaySlider", {
     Text = "Seconds",
     Default = 0,
@@ -3189,12 +3189,12 @@ SecondTab:AddSlider("AttackDelaySlider", {
     Max = 2,
     Rounding = 2,
     Compact = true,
-    Tooltip = "Adds delay to when each attack is used.\nDOES NOT APPLY TO SAFE KILLAURA",
+    Tooltip = "增加每次攻擊的延遲時間。 \n不適用於安全殺戮光環",
     Callback = function(ChangedValue)
         AddedDelay = ChangedValue
     end
 })
-SecondTab:AddLabel("Delay between attacks", true)
+SecondTab:AddLabel("攻擊間隔", true)
 SecondTab:AddSlider("DelayAttackSlider", {
     Text = "Seconds",
     Default = 0,
@@ -3202,7 +3202,7 @@ SecondTab:AddSlider("DelayAttackSlider", {
     Max = 0.5,
     Rounding = 2,
     Compact = true,
-    Tooltip = "When time is added the script will wait that long between performing attacks. When fighting bosses this setting is ignored completely.",
+    Tooltip = "添加時間後，腳本將在執行攻擊之間等待設置的時間。當與 Boss 戰鬥時，這個設定會被完全忽略。",
     Callback = function(ChangedValue)
         if ChangedValue == 0 then
             DelayAttacks = false
@@ -3211,7 +3211,7 @@ SecondTab:AddSlider("DelayAttackSlider", {
         end
     end
 })
-SecondTab:AddLabel("Mob teleport rotation speed", true)
+SecondTab:AddLabel("怪物傳送旋轉速度", true)
 SecondTab:AddSlider("MobRotationSpeedSliderNew", {
     Text = "Studs",
     Default = 20,
@@ -3219,12 +3219,12 @@ SecondTab:AddSlider("MobRotationSpeedSliderNew", {
     Max = 100,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Controls how fast your character rotates around mobs when teleporting to them. If you set it too fast and you're using a melee class then the script may not be able to do damage to mobs effectively.",
+    Tooltip = "控制角色傳送至怪物附近時旋轉的速度。如果設定得太快，且你使用的是近戰職業，腳本可能無法有效地對怪物造成傷害。",
     Callback = function(ChangedValue)
         MobRotationSpeed = ChangedValue
     end
 })
-FourthTab:AddLabel("Pet killaura attack delay", true)
+FourthTab:AddLabel("寵物殺戮光環延遲", true)
 FourthTab:AddSlider("DelayPetAttackSlider", {
     Text = "Seconds",
     Default = 0,
@@ -3232,7 +3232,7 @@ FourthTab:AddSlider("DelayPetAttackSlider", {
     Max = 2,
     Rounding = 2,
     Compact = true,
-    Tooltip = "Controls the delay between pet attacks when using the `Pet killaura` toggle",
+    Tooltip = "控制使用「寵物殺戮光環」開關時寵物攻擊之間的延遲。",
     Callback = function(ChangedValue)
         if ChangedValue == 0 then
             DelayPetAttacks = false
@@ -3241,7 +3241,7 @@ FourthTab:AddSlider("DelayPetAttackSlider", {
         end
     end
 })
-FourthTab:AddLabel("Rejoin on error delay", true)
+FourthTab:AddLabel("錯誤延遲重新加入", true)
 FourthTab:AddSlider("RestartStuckSlider", {
     Text = "Seconds",
     Default = StuckDelay,
@@ -3249,7 +3249,7 @@ FourthTab:AddSlider("RestartStuckSlider", {
     Max = 120,
     Rounding = 0,
     Compact = true,
-    Tooltip = "Controls how long it takes for the script to rejoin the dungeon when something in the dungeon or script has broken causing you to be unable to complete it.",
+    Tooltip = "控制當地牢或腳本中的某些東西損壞或產生Bug導致你無法完成地牢時，腳本重新加入地牢所需的時間。",
     Callback = function(ChangedValue)
         StuckDelay = ChangedValue
     end
