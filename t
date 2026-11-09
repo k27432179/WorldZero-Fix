@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B3-first-entry-diagnostic startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] B3-rejoin-route-fix startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1618,15 +1618,22 @@ local function RejoinLastDungeon(DoRejoin)
                 local RejoinTime = RejoinData.DisconnectedTime
                 delfile(RejoinFileName)
                 if type(RejoinTime) == "number" and RejoinTime <= os.time() and RejoinTime + 300 > os.time() then
-                    if IsDungeon and (RejoinDungeon == ISV.MissionId or RejoinDungeon == ISV.CurrentDungeonID)
-                        and (IsTower or RejoinDifficulty == GetDifficulty()) then
-                        print("[WZF] Rejoin ticket consumed at destination; no replay:", RejoinDungeon, "job:", game.JobId)
-                    else
+                    -- A recovery ticket must never override a dungeon already entered.
+                    -- Recovery initiated below uses only this specific hub as its waypoint.
+                    if IsDungeon then
+                        print("[WZF][REJOIN] ticket discarded; keeping entered dungeon; saved:",
+                            tostring(RejoinDungeon), tostring(RejoinDifficulty),
+                            "current:", tostring(ISV.MissionId), "place:", game.PlaceId, "job:", game.JobId)
+                    elseif IsWorld and StringPlaceID == "4310463616" then
+                        print("[WZF][REJOIN] recovery waypoint; requesting saved destination:",
+                            tostring(RejoinDungeon), tostring(RejoinDifficulty), "job:", game.JobId)
                         if ReplayDungeonLoop(RejoinDungeon, RejoinDifficulty) then
                             KillSwitch = true
                         else
                             warn("[WZF][REJOIN] request not sent; KillSwitch unchanged; mission:", tostring(RejoinDungeon))
                         end
+                    else
+                        print("[WZF][REJOIN] ticket discarded outside recovery waypoint; place:", game.PlaceId, "job:", game.JobId)
                     end
                 end
             else
@@ -3167,7 +3174,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲111111111111",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
