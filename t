@@ -790,7 +790,7 @@ SV.SpecialHexColors = {
     "b00000", "bbaadd", "c0aa11", "00bdae", "55eeaa",
     "ffaded", "beeeee", "ffaaee", "ac11dd", "acce55",
     "ff0011", "decade", "deeeed", "deeee1", "b1a2ed",
-    "aaaaaa", "arcane", "blazed"
+    "aaaaaa"
 }
 SV.EggList = {
     'StarEgg', 'JungleEgg', 'CrystalEgg', 'ChristmasEgg', 'DesertEgg',
@@ -1671,124 +1671,190 @@ do
 end
 
 SetGlobal("restart dungeon")
-local function RestartDungeon(RestartBypass)
-    if SV.TransitionPending then
-        return -- A destination has already been requested in this client.
-    end
-    if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then 
-        return
-    end
-    if SV.TowerChestDelay then
-        task.wait(6)
-    end
-    local Difficulty = GetDifficulty()
-    if not PartyLeaderCheck() then
-        Remotes:WaitForChild("Missions_LeaveChoice", math.huge):FireServer(true)
-        Remotes:WaitForChild("Missions_NotifyReadyToLeave", math.huge):FireServer()
-        return
-    end
-    Library:Notify("Teleporting...", SV.RestartDungeonDelay)
-    KillSwitch = true
-    task.wait(SV.RestartDungeonDelay)
+-- D1: choose ONE destination before sending ANY teleport request.
+-- The old code could request the current mission when lives were 0, and
+-- subsequently request a different prioritized nightmare mission.
+local function ChooseRestartDestination(Difficulty)
+    local CurrentMission = ISV.MissionId
     if IsTower then
         Difficulty = nil
     end
-    if GetLives() == 0 then
-        ReplayDungeonLoop(ISV.MissionId, Difficulty)
-    end
+
+    -- The guild sequence is a distinct, higher-priority mode.
     if SV.DoingGuildDungeon and not SV.IsNightmareDungeon then
-        if not (ISV.MissionId == 42 and Difficulty == 5) then
+        if not (CurrentMission == 42 and Difficulty == 5) then
             if Difficulty == 1 and not IsTower then
                 Library:Notify("Moving to challenge mode", 1)
-                ReplayDungeonLoop(ISV.MissionId, 5)
-            else
-                local NextDungeon
-                for DungeonIndex, Dungeon in SV.DungeonListTable do
-                    if Dungeon.DungeonID == ISV.MissionId then
-                        NextDungeon = DungeonIndex - 1
-                        break
-                    end
-                end
-                local NextDungeonReference = SV.DungeonListTable[NextDungeon]
-                Library:Notify("Moving to " ..NextDungeonReference.DungeonName, 1)
-                if NextDungeonReference.Level > 0 then
-                    ReplayDungeonLoop(NextDungeonReference.DungeonID, 1)
-                else
-                    ReplayDungeonLoop(NextDungeonReference.DungeonID, nil)
+                return CurrentMission, 5, "guild-challenge"
+            end
+            local NextDungeon
+            for DungeonIndex, Dungeon in SV.DungeonListTable do
+                if Dungeon.DungeonID == CurrentMission then
+                    NextDungeon = DungeonIndex - 1
+                    break
                 end
             end
-        else
-            local RestartChoice = Options.DoAllDropdown.Value
-            if RestartChoice == "Stop" then
-                Library:Notify("Finished doing all dungeons", 9999999999999999)
-                return
-            elseif RestartChoice == "Loop" then
-                ReplayDungeonLoop(38, nil)
-            elseif RestartChoice == "Loop w/o inf" then
-                ReplayDungeonLoop(21, nil)
-            elseif RestartChoice == "Loop w/o towers" then
-                ReplayDungeonLoop(1, 1)
-            elseif RestartChoice == "Play nightmare dungeons" then
-                ReplayDungeonLoop(1005, 6)
+            local NextDungeonReference = NextDungeon and SV.DungeonListTable[NextDungeon]
+            if not NextDungeonReference then
+                warn("[WZF][D1] Guild destination not found; mission:", tostring(CurrentMission))
+                return nil, nil, "guild-destination-missing"
             end
+            Library:Notify("Moving to " .. NextDungeonReference.DungeonName, 1)
+            if NextDungeonReference.Level > 0 then
+                return NextDungeonReference.DungeonID, 1, "guild-next"
+            end
+            return NextDungeonReference.DungeonID, nil, "guild-next"
         end
+        local RestartChoice = Options.DoAllDropdown.Value
+        if RestartChoice == "Stop" then
+            Library:Notify("Finished doing all dungeons", 9999999999999999)
+            return nil, nil, "guild-finished"
+        elseif RestartChoice == "Loop" then
+            return 38, nil, "guild-loop"
+        elseif RestartChoice == "Loop w/o inf" then
+            return 21, nil, "guild-loop-no-inf"
+        elseif RestartChoice == "Loop w/o towers" then
+            return 1, 1, "guild-loop-no-towers"
+        elseif RestartChoice == "Play nightmare dungeons" then
+            return 1005, 6, "guild-nightmare"
+        end
+        warn("[WZF][D1] Unknown guild restart choice:", tostring(RestartChoice))
+        return nil, nil, "guild-choice-unknown"
     end
+
+    -- Prioritized nightmare selection must be resolved before the fallback
+    -- current-dungeon replay. Never send an early request just because
+    -- GetLives() returned 0 during/after mission completion.
     if SV.IsNightmareDungeon and SV.PrioNmDCount and ISV.PlayerLevel == 175 then
-        local GetCurrentDailyDungeon = Remotes:WaitForChild("Missions_GetCurrentDailyDungeon", math.huge):InvokeServer()
-        local SelectedDungeon = ISV.MissionId
+        local SelectedDungeon = CurrentMission
         local SelectedDungeonSpecialPerk
         local SelectedDungeonLength = 9999
-        for Index, Data in GetCurrentDailyDungeon do
-            local InternalID = Data.InternalID
-            for DungeonIndex in Options.PrioNmDropdown.Value do
-                local DungeonData = SV.PrioritizedNightmareDungeons[DungeonIndex]
-                if InternalID == DungeonData.ID then
-                    if DungeonData.SpecialPerk then
-                        if not SelectedDungeonSpecialPerk then
-                            SelectedDungeonSpecialPerk = true
-                            SelectedDungeon = Data.ID
-                            SelectedDungeonLength = DungeonData.Length
-                        elseif DungeonData.Length < SelectedDungeonLength then
+        local CurrentDailyDungeon = Remotes:WaitForChild("Missions_GetCurrentDailyDungeon", 10)
+        if not CurrentDailyDungeon then
+            warn("[WZF][D1] Daily nightmare remote missing; no restart requested")
+            return nil, nil, "daily-remote-missing"
+        end
+        local Daily = CurrentDailyDungeon:InvokeServer()
+        if type(Daily) ~= "table" then
+            warn("[WZF][D1] Daily nightmare data invalid; no restart requested")
+            return nil, nil, "daily-data-invalid"
+        end
+        for _, Data in Daily do
+            if type(Data) == "table" then
+                local InternalID = Data.InternalID
+                for DungeonIndex in Options.PrioNmDropdown.Value do
+                    local DungeonData = SV.PrioritizedNightmareDungeons[DungeonIndex]
+                    if DungeonData and InternalID == DungeonData.ID then
+                        if DungeonData.SpecialPerk then
+                            if not SelectedDungeonSpecialPerk then
+                                SelectedDungeonSpecialPerk = true
+                                SelectedDungeon = Data.ID
+                                SelectedDungeonLength = DungeonData.Length
+                            elseif DungeonData.Length < SelectedDungeonLength then
+                                SelectedDungeon = Data.ID
+                                SelectedDungeonLength = DungeonData.Length
+                            end
+                        elseif not SelectedDungeonSpecialPerk and DungeonData.Length < SelectedDungeonLength then
                             SelectedDungeon = Data.ID
                             SelectedDungeonLength = DungeonData.Length
                         end
-                    elseif not SelectedDungeonSpecialPerk and DungeonData.Length < SelectedDungeonLength then
-                        SelectedDungeon = Data.ID
-                        SelectedDungeonLength = DungeonData.Length
                     end
                 end
             end
         end
-        ReplayDungeonLoop(SelectedDungeon, Difficulty)
+        return SelectedDungeon, Difficulty, "priority-nightmare"
     end
+
+    -- Keep the original first-eligible leveling dungeon behavior while
+    -- avoiding a request for every eligible candidate in the loop.
     if SV.AutoLeveling and not IsEventDungeon then
         local CheckPartySize = Players:GetChildren()
         local LowestLevel = math.huge
         if #CheckPartySize > 1 then
-            for Index, Player in CheckPartySize do
+            for _, Player in CheckPartySize do
                 local MemberLevel = Player:GetAttribute("Level")
                 if MemberLevel and MemberLevel < LowestLevel then
                     LowestLevel = MemberLevel
                 end
             end
         else
-            LowestLevel = LocalPlayer:GetAttribute("Level")
+            LowestLevel = LocalPlayer:GetAttribute("Level") or 0
         end
-        for Index, AutoLevelingDungeon in SV.DungeonListTable do
+        for _, AutoLevelingDungeon in SV.DungeonListTable do
             if LowestLevel >= AutoLevelingDungeon.Level then
-                if AutoLevelingDungeon.DungeonID == ISV.MissionId then
-                    Library:Notify("Replaying: " ..AutoLevelingDungeon.DungeonName, 2)
+                if AutoLevelingDungeon.DungeonID == CurrentMission then
+                    Library:Notify("Replaying: " .. AutoLevelingDungeon.DungeonName, 2)
                 else
-                    Library:Notify("Moving to: " ..AutoLevelingDungeon.DungeonName, 2)
+                    Library:Notify("Moving to: " .. AutoLevelingDungeon.DungeonName, 2)
                 end
-                ReplayDungeonLoop(AutoLevelingDungeon.DungeonID, 5)
+                return AutoLevelingDungeon.DungeonID, 5, "auto-leveling"
             end
         end
+        warn("[WZF][D1] No eligible leveling dungeon; no restart requested")
+        return nil, nil, "leveling-destination-missing"
     end
+
+    -- Use the configured nightmare pick without overwriting the actual
+    -- mission ID for the dungeon that the character is currently in.
     if SV.RandomNightmareDungeon and SV.IsNightmareDungeon then
-        ISV.MissionId = SV.RandomNightmareDungeon
+        return SV.RandomNightmareDungeon, Difficulty, "random-nightmare"
     end
-    ReplayDungeonLoop(ISV.MissionId, Difficulty)
+
+    return CurrentMission, Difficulty, "replay-current"
+end
+
+local function RestartDungeon(RestartBypass)
+    if SV.TransitionPending or SV.TransitionSelecting then
+        print("[WZF][D1] Restart already selecting/sent; job:", game.JobId)
+        return
+    end
+    if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then
+        return
+    end
+    -- Lock before any yielding remote calls, so concurrent completion / UI
+    -- callbacks cannot independently choose two different destinations.
+    SV.TransitionSelecting = true
+    local Success, Result = pcall(function()
+        if SV.TowerChestDelay then
+            task.wait(6)
+        end
+        local Difficulty = GetDifficulty()
+        if not PartyLeaderCheck() then
+            Remotes:WaitForChild("Missions_LeaveChoice", 10):FireServer(true)
+            Remotes:WaitForChild("Missions_NotifyReadyToLeave", 10):FireServer()
+            return
+        end
+        local Mission, TargetDifficulty, Reason = ChooseRestartDestination(Difficulty)
+        if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
+            warn("[WZF][D1] Restart cancelled; destination invalid:",
+                tostring(Mission), "reason:", tostring(Reason), "job:", game.JobId)
+            return
+        end
+        print("[WZF][D1] Selected one restart destination:",
+            Mission, tostring(TargetDifficulty), "reason:", Reason,
+            "current:", tostring(ISV.MissionId), "job:", game.JobId)
+        Library:Notify("Teleporting...", SV.RestartDungeonDelay)
+        task.wait(tonumber(SV.RestartDungeonDelay) or 3)
+        if ScriptUnloaded or not SV or SV.TransitionPending then
+            return
+        end
+        if ReplayDungeonLoop(Mission, TargetDifficulty) then
+            -- Do not stop Autofarm until an actual request has been sent.
+            -- FireServer acceptance is not confirmed here.
+            KillSwitch = true
+        else
+            warn("[WZF][D1] Replay request not sent; Autofarm not stopped")
+        end
+    end)
+    if SV then
+        SV.TransitionSelecting = false
+    end
+    if not Success then
+        warn("[WZF][D1] RestartDungeon error; no further request:", tostring(Result))
+        if type(SaveErrorToFile) == "function" then
+            SaveErrorToFile("RESTART DUNGEON D1", Result)
+        end
+    end
 end
 
 SetGlobal("collect chests")
@@ -3369,7 +3435,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09222222222222",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09333333333333",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -7899,401 +7965,4 @@ if IsDungeon then
                     end)
                     ConnectionTable["ConnectTowerPrint"] = Remotes:WaitForChild("Towers_Print").OnClientEvent:Connect(function(Text)
                         if WaveExitPart then
-                            if string.find(Text, "false") then
-                                DisconnectVariable("ConnectTower")
-                                TeleportParts[WaveExitPart].DontTeleport = true
-                                DisconnectVariable("ConnectTowerPrint")
-                            end
-                        end
-                    end)
-                    WaveExitPart = MissionObjects:WaitForChild("WaveExit", math.huge)
-                end
-            end)
-        end
-    end)
-    if not Success then
-        SaveErrorToFile("FIND TELEPORT PARTS", Result)
-    end
-end
-
---SetGlobal("waiting for character")
---if not IsMainMenu then
---    local IsDead = false
---    local AlreadyCheckingLives = false
---    repeat
---        if IsDungeon then
---            task.spawn(function()
---                if AlreadyCheckingLives then
---                    return
---                end
---                AlreadyCheckingLives = true
---                if GetLives() == 0 then
---                    IsDead = true
---                    LoadingStep(true)
---                    RejoinLastDungeon(false)
---                    RestartDungeon(true)
---                    return
---                end
---                AlreadyCheckingLives = false
---            end)
---        elseif IsWorld then
---            RejoinLastDungeon(false)
---        end
---        task.wait(0.2)
---    until LocalPlayer.Character
---    if IsDead then
---        return
---    end
---    PlayerCharacter = LocalPlayer.Character
---    PlayerCollider = PlayerCharacter:WaitForChild("Collider")
---    PlayerRoot = PlayerCharacter:WaitForChild("HumanoidRootPart")
---    print("JDRS: local player character found")
---end
-
-SetGlobal("prevent falling part")
-if IsDungeon then
-    task.spawn(function()
-        CheckForCharacter()
-        PlayerStandPart = Instance.new("Part")
-        PlayerStandPart.Size = Vector3.new(3, 1, 3)
-        PlayerStandPart.Parent = Workspace
-        PlayerStandPart.Anchored = true
-        PlayerStandPart.Transparency = 1
-        PlayerStandPart.CanCollide = true
-        PlayerStandPart.CanTouch = false
-        PlayerStandPart.CanQuery = false
-        StandPartHeight = GetPlayerSize() + PlayerStandPart.Size.Y/2.75
-    end)
-end
-
-SetGlobal("spawning function")
-if not IsMainMenu then
-    SV.Parties = ReturnChild(ReplicatedStorage, "Parties") -- ready before MobScanner can use it
-    SpawnFunctions = {
-        CheckForAvoidMobs, MobScanner, CheckPlayerPing,
-        ConnectMissionFinished, ConnectTowerFinished,
-    }
-    for _, SpawnFunction in SpawnFunctions do
-        task.spawn(function()
-            SpawnFunction()
-        end)
-    end
-end
-
-SetGlobal("getting class variables")
-if not IsMainMenu then
-    ISV.PlayerClass = WaitForAttribute(LocalPlayer, "Class")
-    ISV.PlayerLevel = WaitForAttribute(LocalPlayer, "Level")
-    ISV.PlayerPrestige = WaitForAttribute(LocalPlayer, "Prestige")
-    PlayerProfile = ReturnChild(PlayerGui, "Profile")
-    ProfileInventory = ReturnChild(PlayerProfile, "Inventory")
-    SV.Parties = ReturnChild(ReplicatedStorage, "Parties")
-end
-
-SetGlobal("equipment pop up screen")
-if IsTower and SV.CanRequire and EF.Hook and EF.NewClosure then
-    local Success, Result = pcall(function()
-        local DisplayItem = require(Client.Gui):Get("LootReceived")._DisplayItem
-        CreateHookOnFunction(DisplayItem, true)
-    end)
-    if not Success then
-        print("JDRS: executor can't disable loot screen")
-    end
-end
-
-SetGlobal("connecting drops/chests")
-do
-    local CoinEvent = Remotes:WaitForChild("Drops_CoinEvent", math.huge)
-    ConnectionTable["CollectDrops"] = CoinEvent.OnClientEvent:Connect(function(DropData)
-        if SV.CollectDrops then
-            CoinEvent:FireServer(DropData.id)
-        else
-            SV.Drops[DropData.id] = time()
-        end
-    end)
-    local SpawnChest = Remotes:WaitForChild("Chests_SpawnChest", math.huge)
-    local OpenChest = Remotes:WaitForChild("Chests_OpenChest", math.huge)
-    ConnectionTable["ConnectChests"] = SpawnChest.OnClientEvent:Connect(function(ChestName, Location, GUID, d, e)
-        if SV.CollectChests then
-            OpenChest:FireServer(GUID)
-        else
-            table.insert(SV.Chests, GUID)
-        end
-    end)
-end
-
-SetGlobal("clean up script")
-function CleanUpScript()
-    ScriptUnloaded = true
-    warn("[WZF][CLEANUP] invoked; job:", game.JobId)
-    for Index in Toggles do
-        local StringIndex = tostring(Index)
-        if not string.find(StringIndex, "AutoScriptToggle") then
-            Toggles[tostring(Index)]:SetValue(false) -- safely turn off all toggles
-        end
-    end
-    for Index in Options do
-        local StringIndex = tostring(Index)
-        if string.find(StringIndex, "Dropdown") and not string.find(StringIndex, "UnloadTabDropdown") then
-            Options[StringIndex]:SetValue({}) -- safely erase all dropdowns to turn attached functions off
-        end
-    end
-    ISV.TeleportingToAnotherServer = true
-    if not IsMainMenu and SV.CanRequire and EF.Hook and EF.CheckHook and EF.ClearHook and EF.NewClosure then
-        local rPlayerRemover = require(SMobs:WaitForChild("PlayerRemover", math.huge))
-        CreateHookOnFunction(rPlayerRemover.AddMobToSearch, false)
-        for Index, Mob in Mobs:GetChildren() do
-            rPlayerRemover:AddMobToSearch(Mob)
-        end
-        if SV.IsRanged then
-            for Mob, MobData in ISV.MobTable do
-                local MobCollider = Mob:WaitForChild("Collider", 5)
-                if MobCollider then
-                    MobCollider.Size = MobCollider.Size*2
-                end
-            end
-        end
-        rPlayerRemover = nil
-        local rDrops = require(Drops)
-        CreateHookOnFunction(rDrops.DropStarterpassExp, false)
-        CreateHookOnFunction(rDrops.DropBattlepassExp, false)
-        CreateHookOnFunction(rDrops.DropHealthOrb, false)
-        CreateHookOnFunction(rDrops.SpawnCoinsLocal, false)
-        rDrops = nil
-        local rModelProvider = require(ModelProvider)
-        CreateHookOnFunction(rModelProvider.GetModel, false)
-        rModelProvider = nil
-        local rEffects = require(Effects)
-        CreateHookOnFunction(rEffects.RenderDamageNumber, false)
-        CreateHookOnFunction(rEffects.MakeProjectile, false)
-        CreateHookOnFunction(rEffects.DoEffect, false)
-        CreateHookOnFunction(rEffects.PlayAt, false)
-        CreateHookOnFunction(rEffects.EmitAt, false)
-        rEffects = nil
-        local rGui = require(Client.Gui)
-        CreateHookOnFunction(rGui:Get("LootReceived")._DisplayItem, false)
-        rGui = nil
-        local rActions = require(Client.Actions)
-        rActions:SetSkillDisabled("Primary", false)
-        rActions:SetSkillDisabled("Skill1", false)
-        rActions:SetSkillDisabled("Skill2", false)
-        rActions:SetSkillDisabled("Skill3", false)
-        rActions:SetSkillDisabled("Ultimate", false)
-        CreateHookOnFunction(rActions.IsBusy, false)
-        CreateHookOnFunction(rActions.Knockdown, false)
-        rActions = nil
-    end
-    if DC then
-        if EF.Queue then
-            local FileName = "JDRS/AutoExecute"
-            if isfile(FileName) then
-                delfile(FileName)
-                EF.ClearQueue()
-            end
-        end
-        if IsDungeon then
-            if SV.PlayerCamera and SV.PlayerCamera.Parent and PlayerRoot == SV.PlayerCamera.Parent then
-                Workspace.CurrentCamera.CameraSubject = SV.PlayerCamera
-            else
-                Workspace.CurrentCamera.CameraSubject = PlayerRoot:WaitForChild("Part", math.huge)
-            end
-        end
-        if SV.WalkspeedManager then
-            if ISV.IsMobile then
-                SV.WalkspeedManager:SetBaseSpeed(28)
-            else
-                SV.WalkspeedManager:SetBaseSpeed(20)
-            end
-        end
-        if ISV.RenderingScreen then
-            ISV.RenderingScreen:Destroy()
-            ISV.RenderingScreen = nil
-            RunService:Set3dRenderingEnabled(true)
-        end
-        for Key in ISV do
-            ISV[Key] = nil
-        end
-        for Key in EF do
-            EF[Key] = nil
-        end
-        ISV = nil
-        if PlayerRoot then
-            PlayerRoot.CanCollide = true
-        end
-        for Part, PartData in TeleportParts do
-            if Part and Part.Parent then
-                Part.Size = PartData.OriginalSize
-                Part.CanCollide = PartData.OriginalCollision
-                Part.Position = PartData.OriginalLocation
-            end
-        end
-        ScriptUnloaded, Remotes, SetGlobal,
-        RequestMessage = nil
-    end
-    for Key in SV do
-        SV[Key] = nil
-    end
-    for Index, Connection in ConnectionTable do
-        Connection:Disconnect()
-        ConnectionTable[Index] = nil
-    end
-    _G.Is_Script_Running = nil
-    Library:Unload()
-    SaveErrorToFile = function()
-        return
-    end
-    if PlayerStandPart then
-        PlayerStandPart:Destroy()
-    end
-    Library, SaveManager, MakeGuiElement, MakeErrorGui, ReturnService,
-    GetShared, ReturnChild, WaitForAttribute, Workspace, Players,
-    CoreGui, StarterGui, ReplicatedStorage, HttpService, VirtualUser,
-    RunService, MarketplaceService, TeleportService, Shared, Battlepass,
-    Charms, Chests, Drops, Effects, Health,
-    Inventory, Items, Missions, SMobs, ModelProvider,
-    Party, Pets, Quests, Shop, Skills,
-    Teleport, Camera, Mobs, MissionObjects, LocalPlayer,
-    PlayerName, PlayerID, PlayerGui, PlayerPing, PlayerProfile,
-    ProfileInventory, PlayerCharacter, PlayerCollider, PlayerRoot, AddedDelay,
-    Xdistance, Ydistance, TempStop, HoldForRealTime, RestartAtFloor,
-    CurrentMob, IsMobCamera, KeepTier, SellItemCheck, OffsetMax,
-    EquipInProgress, MobRotationSpeed, DelayPetAttacks, IsAliveMobs, DiscordPingType,
-    TeleportMob, StuckDelay, DelayAttacks, IsBoss, EventOverride,
-    CanTarget, PingMultiplie, StringPlaceID, IsWorld, IsMainMenu,
-    IsDungeon, IsTower, SaveScriptToFiles, AvoidMobs, TeleportParts,
-    FormatNumber, FormatDecimal, GetPercentage, SecondsToString, IsMissionOver,
-    CheckForAvoidMobs, CheckPlayerPing, MobScanner, PingOnceUnlocked, PingForCap,
-    GetDifficulty, GetLives, PartyLeaderCheck, ReplayDungeonLoop, RejoinLastDungeon,
-    RestartDungeon, CollectChests, ClaimAllQuests, GetDungeonImage, ConnectMissionFinished,
-    ConnectTowerFinished, GetRarity, EquipNewItemAdded, StatTotals, CollectTowerChests,
-    CollectCoins, GetGuild, IsTowerEgg, SellItem, BuyFromLocalShop,
-    BuyFromEggShop, OpenMenu, UpgradeToMax, ExpandPartSize, FindPart,
-    ToggleMenu, DodgeCurrentAttack, TeleportToOrb, BuildAttackData, GetPlayerPet,
-    GetPlayerClass, BuildShopValues, DisconnectVariable, TeleportStandPart, GetPlayerSize,
-    PlayerStandPart, StandPartHeight, CreateHookOnFunction, Class, ClassSkills,
-    PetSkills, ItemSellCheck, RecycleFromInventory = nil
-    _G.ScriptRunning = nil
-end
-
-SetGlobal("obsidian save manager")
-SaveManager = SaveScriptToFiles("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/addons/SaveManager.lua", "S", 1)
-
-print("Script took", FormatDecimal(os.clock() - ScriptLoadingStart), "seconds to fully load from execution time")
-ScriptLoadingStart = nil
-
--- Independent observation only: never restarts workers or sends transitions.
-task.spawn(function()
-    while not ScriptUnloaded and _G.ScriptRunning do
-        task.wait(10)
-        if ScriptUnloaded or not SV then break end
-        local Count = 0
-        if ISV and ISV.MobTable then for _ in ISV.MobTable do Count += 1 end end
-        print("[WZF][HEARTBEAT]", "job", game.JobId,
-            "step", tostring(_G.ScriptStep), "toggle", tostring(Toggles and Toggles.AutoProgressToggle and Toggles.AutoProgressToggle.Value),
-            "autofarm", tostring(SV.Autofarm), "kill", tostring(KillSwitch),
-            "character", PlayerCharacter ~= nil, "root", PlayerRoot ~= nil, "collider", PlayerCollider ~= nil,
-            "scanner", tostring(SV.WZFScannerState), "scanAge", SV.WZFScannerTick and os.clock()-SV.WZFScannerTick or -1,
-            "mover", tostring(SV.WZFMoverState), "moveAge", SV.WZFMoverTick and os.clock()-SV.WZFMoverTick or -1,
-            "tempStop", tostring(TempStop), "hold", tostring(HoldForRealTime), "event", tostring(EventOverride),
-            "canTarget", tostring(CanTarget), "cachedMobs", Count, "folderMobs", Mobs and #Mobs:GetChildren() or -1,
-            "target", tostring(TeleportMob), "mission", tostring(ISV and ISV.MissionId),
-            "transition", tostring(SV.TransitionPending))
-    end
-end)
-SetGlobal("loading configs")
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-SaveManager:SetFolder("JDRS/saved_configs")
-SaveManager:BuildConfigSection(ConfigTab)
--- B3-test: config parsers may run after LoadAutoloadConfig returns.
--- Listen to the setting itself, without waiting for long-running farm callbacks.
-do
-    local function ApplyMenuVisibility()
-        if ScriptUnloaded or not Library or Library.Unloaded then return end
-        local HideOnStart = Toggles.HideGuiToggle and Toggles.HideGuiToggle.Value == true
-        local ShouldShowMenu = not HideOnStart
-        if type(Library.Toggle) == "function" and type(Library.Toggled) == "boolean" then
-            if Library.Toggled ~= ShouldShowMenu then
-                Library:Toggle()
-            end
-            print("[WZF] Menu visibility applied; hidden:", HideOnStart, "job:", game.JobId)
-        else
-            warn("[WZF] Could not determine current menu visibility")
-        end
-    end
-    if Toggles.HideGuiToggle then
-        Toggles.HideGuiToggle:OnChanged(ApplyMenuVisibility)
-    end
-    SaveManager:LoadAutoloadConfig()
-    task.defer(ApplyMenuVisibility)
-end
-
-do
-    SetGlobal("checking platform")
-    local GetPlatform = game:GetService("UserInputService"):GetPlatform()
-    if GetPlatform ~= Enum.Platform.Android and GetPlatform ~= Enum.Platform.IOS then
-        Library:Notify("You can press 0 (zero key) to open/close the menu", 10)
-    else
-        ISV.IsMobile = true
-    end
-end
-
-SetGlobal("checking for old obsidian")
--- The window already uses ToggleKeybind = Enum.KeyCode.Zero.
--- Do not wait forever for a second GUI or register a duplicate key handler.
-print("[WZF] Legacy Obsidian input handler skipped")
-
-SetGlobal("leaderboard info set up")
-if IsWorld or IsDungeon then
-    task.spawn(function()
-        local Success, Result = pcall(function()
-            local GetScore = Remotes:WaitForChild("LeaderboardHookup_GetScore", math.huge)
-            if not SV.DungeonsTab then
-                if GetLeaderboardScore("C_NP1", SV.TotalNightmareLabel, SV.DailyNightmareLabel, SV.StopAfterTotalNightmare, SV.StopAfterDailyNightmare) then
-                    Library:Notify("Nightmare portal clear limit reached.", 999999999)
-                    local TempStop = true
-                    local CanTarget = false
-                    if SV.NightmarePing then
-                        PingForCap("Nightmare portal")
-                    end
-                end
-            end -- for unloaded dungeons tan
-            if not SV.GuildTab then
-                local TotalPointData = GetScore:InvokeServer("G_POINTS22", 1)
-                local DailyPointData = Remotes:WaitForChild("Profile_GetOwnCollectionValue", math.huge):InvokeServer("GuildPointsEarnedToday")
-                local GuildPointTotal = TotalPointData[1]
-                local GuildPointTotalLimit = tonumber(SV.StopAfterTotalPoints)
-                local GuildPointDaily = DailyPointData
-                local GuildPointDailyLimit = tonumber(SV.StopAfterDailyPoints)
-                SV.TotalGuildPointLabel:SetText("Total Guild Points: " ..FormatNumber(GuildPointTotal))
-                SV.DailyGuildPointLabel:SetText("Daily Guild Points: " ..FormatNumber(GuildPointDaily))
-                if (GuildPointTotalLimit and (GuildPointTotal >= GuildPointTotalLimit)) or (GuildPointDailyLimit and (GuildPointDaily >= GuildPointDailyLimit)) then
-                    Library:Notify("Guild point limit reached.", 999999999)
-                    CanTarget = false
-                    TempStop = true
-                    if SV.GuildPing then
-                        PingForCap("Guild Point")
-                    end
-                end
-            end -- for unloaded guild tab
-        end)
-        if not Success then
-            print(Result)
-        end
-    end)
-end
-
--- Event dungeons may report zero lives without being a failed run.
--- Their completion/failure event remains responsible for automatic replay.
-if IsDungeon and not IsEventDungeon then
-    local StartupLives = GetLives()
-    print("[WZF] Startup lives check:", tostring(StartupLives), "job:", game.JobId)
-    if StartupLives == 0 then
-        RestartDungeon()
-    end
-elseif IsEventDungeon then
-    print("[WZF] Event startup lives replay skipped; waiting for mission result; job:", game.JobId)
-end
-
-SetGlobal("end")
+                            if string.find
