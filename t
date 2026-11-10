@@ -25,7 +25,7 @@ do
     if TrackProgress then
         task.spawn(function()
             repeat
-                print(_G.ScriptStep)
+                print(_G.ScriptStep)                            
                 task.wait(1)
             until _G.ScriptStep == "end"
             print("loaded everything")
@@ -2804,6 +2804,181 @@ local function BuildShopValues(TargetDropdown, TargetShop)
 end
 
 SetGlobal("mass item sell")
+-- WZF: optional limited special-color protection. Default mode remains unchanged.
+-- These are the exact inventory colors (not the number of saved color patterns).
+local SPECIAL_HEX_KEEP_LIMIT = 10
+local LimitedColorActionBusy = false
+
+local function IsSavedSpecialDye(Dye, HexPatterns)
+    if type(Dye) ~= "string" then
+        return false
+    end
+    local Normalized = string.lower(Dye)
+    for _, Pattern in HexPatterns do
+        -- Custom patterns were supported by the original script. Treat malformed
+        -- patterns as non-matches rather than letting them abort the entire scan.
+        if type(Pattern) == "string" and Pattern ~= "" then
+            local Ok, Matched = pcall(string.match, Normalized, "^" .. Pattern)
+            if Ok and Matched then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- This mode never selects locked/favorite items or cosmetics not selected by
+-- the user for removal. Those items DO count toward the 10-per-color limit.
+-- A fresh server inventory is checked before any destructive request.
+local function LimitedColorRecycle(Method, SelectedItems, HexesToSave)
+    if not SV.RealCosmeticTable then
+        Library:Notify("請先按「掃描外觀」，再選擇要處理的外觀。", 5)
+        return
+    end
+
+    local SelectedByUUID = {}
+    local SelectedCount = 0
+    for ItemName, GroupedData in SV.RealCosmeticTable do
+        if SelectedItems[ItemName] then
+            for _, ItemData in GroupedData do
+                if type(ItemData.UUID) == "string" and type(ItemData.Name) == "string" then
+                    if not SelectedByUUID[ItemData.UUID] then
+                        SelectedCount += 1
+                    end
+                    SelectedByUUID[ItemData.UUID] = ItemData
+                end
+            end
+        end
+    end
+    if SelectedCount == 0 then
+        Library:Notify("沒有可處理的已掃描外觀，請先掃描並勾選項目。", 5)
+        return
+    end
+
+    local Query = Remotes and Remotes:FindFirstChild("Profile_GetCosmetics")
+    if not Query then
+        Library:Notify("無法重新確認背包，為安全起見取消操作。", 5)
+        return
+    end
+    local Ok, FreshInventory = pcall(function()
+        return Query:InvokeServer()
+    end)
+    if not Ok or type(FreshInventory) ~= "table" then
+        Library:Notify("背包資料讀取失敗，未執行任何回收或出售。", 5)
+        return
+    end
+
+    local ColorBuckets = {}
+    local UnprotectedOtherColors = {}
+    local SeenUUID = {}
+    local SkippedChanged = 0
+
+    for _, LiveItem in FreshInventory do
+        if type(LiveItem) ~= "table" or type(LiveItem.uuid) ~= "string" then
+            Library:Notify("背包資料缺少 UUID，為避免誤回收已取消操作。", 5)
+            return
+        end
+        local UUID = LiveItem.uuid
+        if SeenUUID[UUID] then
+            continue
+        end
+        SeenUUID[UUID] = true
+
+        local Scanned = SelectedByUUID[UUID]
+        local Protected = not not (LiveItem.lock or LiveItem.fav
+            or LiveItem.equipped or LiveItem.equip or LiveItem.isEquipped)
+        local Dye, ColorOk = nil, true
+        if LiveItem.d ~= nil then
+            local Data = LiveItem.d
+            if type(Data) ~= "table" or type(Data.r) ~= "number"
+                or type(Data.g) ~= "number" or type(Data.b) ~= "number" then
+                ColorOk = false
+            else
+                local Parsed, Value = pcall(function()
+                    return string.lower(Color3.new(Data.r, Data.g, Data.b):ToHex())
+                end)
+                if Parsed then Dye = Value else ColorOk = false end
+            end
+        end
+        if not ColorOk then
+            Library:Notify("背包色碼資料格式異常，為避免誤回收已取消操作。", 5)
+            return
+        end
+
+        local SameAsScan = not Scanned or (Scanned.Dye and string.lower(Scanned.Dye) or nil) == Dye
+        if Scanned and not SameAsScan then
+            SkippedChanged += 1
+        end
+        local CanRecycle = Scanned ~= nil and SameAsScan and not Protected
+        if IsSavedSpecialDye(Dye, HexesToSave) then
+            local Bucket = ColorBuckets[Dye]
+            if not Bucket then
+                Bucket = { Reserved = 0, Candidates = {} }
+                ColorBuckets[Dye] = Bucket
+            end
+            if CanRecycle then
+                table.insert(Bucket.Candidates, { UUID = UUID, Name = Scanned.Name })
+            else
+                -- Locked, favorite, unselected and changed records stay untouched.
+                Bucket.Reserved += 1
+            end
+        elseif CanRecycle then
+            -- Same behavior as the original for ordinary/uncolored cosmetics.
+            table.insert(UnprotectedOtherColors, { UUID = UUID, Name = Scanned.Name })
+        end
+    end
+
+    local OtherCandidateCount = #UnprotectedOtherColors
+    local ItemsToRecycle = UnprotectedOtherColors
+    local SpecialSurplus = 0
+    local ColorGroupCount = 0
+    for Dye, Bucket in ColorBuckets do
+        ColorGroupCount += 1
+        -- Use stable ordering, independent of the order returned by the server.
+        table.sort(Bucket.Candidates, function(A, B)
+            return A.UUID < B.UUID
+        end)
+        local Remaining = math.max(0, SPECIAL_HEX_KEEP_LIMIT - Bucket.Reserved)
+        for Index, Item in Bucket.Candidates do
+            if Index > Remaining then
+                table.insert(ItemsToRecycle, Item)
+                SpecialSurplus += 1
+            end
+        end
+        print(string.format("[WZF][HEX] %s: untouched=%d, selected=%d, keep selected=%d, surplus=%d",
+            Dye, Bucket.Reserved, #Bucket.Candidates,
+            math.min(Remaining, #Bucket.Candidates),
+            math.max(0, #Bucket.Candidates - Remaining)))
+    end
+    table.sort(ItemsToRecycle, function(A, B)
+        return A.UUID < B.UUID
+    end)
+    print(string.format("[WZF][HEX] Total selected=%d; colors=%d; special surplus=%d; other candidates=%d; changed skipped=%d; total action=%d",
+        SelectedCount, ColorGroupCount, SpecialSurplus, OtherCandidateCount,
+        SkippedChanged, #ItemsToRecycle))
+
+    if Method == "Preview" then
+        Library:Notify(string.format("預覽：特殊色碼超額 %d 件，其他可處理 %d 件；實際未操作。",
+            SpecialSurplus, OtherCandidateCount), 7)
+        return
+    end
+
+    if SkippedChanged > 0 then
+        Library:Notify("有 " .. SkippedChanged .. " 件物品與上次掃描不符，已跳過；建議重新掃描。", 6)
+    end
+    if #ItemsToRecycle == 0 then
+        Library:Notify("沒有超出保留上限、可處理的已選取外觀。", 5)
+        return
+    end
+    if Method == "Recycle" then
+        Library:Notify("限量模式：嘗試回收 " .. #ItemsToRecycle .. " 件，請完成後重新掃描。", 6)
+        Remotes:WaitForChild("Recycler_Recycle", 10):FireServer(ItemsToRecycle)
+    elseif Method == "Gold" then
+        Library:Notify("限量模式：嘗試出售 " .. #ItemsToRecycle .. " 件，請完成後重新掃描。", 6)
+        Remotes:WaitForChild("Drops_SellItems", 10):InvokeServer(ItemsToRecycle)
+    end
+end
+
 local function RecycleFromInventory(Method, SelectedItems)
     local HexesToSave = {}
     local AddHexes = Options.SaveUserHexesInput.Value
@@ -2821,6 +2996,26 @@ local function RecycleFromInventory(Method, SelectedItems)
         for Index, Hex in SV.SpecialHexColors do
             table.insert(HexesToSave, Hex)
         end
+    end
+
+    -- Default OFF: preserve the author's original all-special-colors mode.
+    if Toggles.LimitSpecialHexKeepToggle and Toggles.LimitSpecialHexKeepToggle.Value then
+        if LimitedColorActionBusy then
+            Library:Notify("色碼清單正在處理，請勿重複操作。", 5)
+            return
+        end
+        LimitedColorActionBusy = true
+        local Ok, Error = xpcall(function()
+            LimitedColorRecycle(Method, SelectedItems, HexesToSave)
+        end, function(Message)
+            return tostring(Message)
+        end)
+        LimitedColorActionBusy = false
+        if not Ok then
+            warn("[WZF][HEX] 限量處理失敗：", Error)
+            Library:Notify("限量處理發生錯誤，請重新掃描；未保證伺服器已完成處理。", 6)
+        end
+        return
     end
 
     local ItemsToRecycle = {}
@@ -3174,7 +3369,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲111111111111",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09111111111111111111111",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4306,6 +4501,30 @@ FourthTab:AddButton({
         end
     end
 })
+-- WZF: opt-in special color protection limit (false = unchanged original behavior).
+FifthTab:AddToggle("LimitSpecialHexKeepToggle", {
+    Text = "限量保留：每種特殊色碼最多 10 件",
+    Default = false,
+    Tooltip = "關閉：原版模式，符合特殊色碼的外觀全部保留。\n開啟：同一種實際色碼最多保留 10 件（全背包計數）。上鎖、收藏和未選取的物品只計數、不處理；如果它們已超過 10 件，不會強制刪除。\n此功能只影響「回收轉盤物品」與已掃描外觀的「回收／出售」，不影響一般裝備自動出售。請先使用預覽。",
+})
+FifthTab:AddButton({
+    Text = "預覽限量處理（不出售／回收）",
+    Tooltip = "先在「外觀」分頁按「掃描外觀」並勾選要處理的外觀。此按鈕只計算，不會回收或出售物品。詳細統計顯示於 Console。",
+    Func = function()
+        if not (Toggles.LimitSpecialHexKeepToggle and Toggles.LimitSpecialHexKeepToggle.Value) then
+            Library:Notify("請先開啟「限量保留」模式。", 5)
+            return
+        end
+        local SelectedItems = {}
+        if Options.CosmeticDropdown and type(Options.CosmeticDropdown.Value) == "table" then
+            for ItemName, Enabled in Options.CosmeticDropdown.Value do
+                if Enabled then SelectedItems[ItemName] = true end
+            end
+        end
+        RecycleFromInventory("Preview", SelectedItems)
+    end,
+})
+FifthTab:AddLabel("限量模式預設關閉。請先掃描外觀，使用預覽確認，再雙擊回收或出售。", true)
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
 local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
