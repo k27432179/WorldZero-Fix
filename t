@@ -2940,6 +2940,10 @@ function HexRetention.Plan(Records, Limited)
 end
 
 function HexRetention.Run(Method, SelectedItems, PreviewOnly)
+    if PreviewOnly ~= true then
+        Library:Notify("此版本已停用批次回收與出售，請只使用預覽。", 8)
+        return
+    end
     if Method ~= "Recycle" and Method ~= "Gold" then return end
     if type(SelectedItems) ~= "table" or type(SV.RealCosmeticTable) ~= "table" then
         Library:Notify("請先掃描外觀，再選取要處理的外觀。", 5)
@@ -3010,19 +3014,42 @@ function HexRetention.Run(Method, SelectedItems, PreviewOnly)
     local Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = HexRetention.Plan(Records, Limited)
     local Mode = Limited and "每色保留10件" or "特殊色全部保留"
     if PreviewOnly then
+        local Planned, Stats = {}, {}
+        for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
+        for _, Record in ipairs(Records) do
+            local Color = Record.Hex or "<無染色>"
+            local Row = Stats[Color]
+            if not Row then
+                Row = {Selected = 0, Keep = 0, Remove = 0, Special = Record.Special, Other = 0}
+                Stats[Color] = Row
+            end
+            if Record.Selected then
+                Row.Selected = Row.Selected + 1
+                if Planned[Record.UUID] then Row.Remove = Row.Remove + 1 else Row.Keep = Row.Keep + 1 end
+            else
+                Row.Other = Row.Other + 1
+            end
+        end
+        warn("[WZF][KEEP10] 只讀診斷 stop-v1；模式:", Mode)
+        local Colors = {}
+        for Color, Row in pairs(Stats) do
+            if Row.Selected > 0 then table.insert(Colors, Color) end
+        end
+        table.sort(Colors)
+        for Index, Color in ipairs(Colors) do
+            if Index > 50 then warn("[WZF][KEEP10] 其餘色碼省略；本次未實際處理。"); break end
+            local Row = Stats[Color]
+            warn("[WZF][KEEP10] 色碼:", Color, "辨識為特殊色:", Row.Special,
+                "選取件數:", Row.Selected, "選取中預計保留:", Row.Keep,
+                "選取中預計處理:", Row.Remove, "其他同色件數:", Row.Other)
+        end
         Library:Notify("預覽（" .. Mode .. "）：特殊色超額 " .. SpecialExcess
             .. " 件；一般色／無色 " .. Ordinary .. " 件；合計待處理 " .. #Plan
             .. " 件。選取中受保護 " .. ProtectedSelected .. " 件。沒有出售或回收。", 12)
         return
     end
-    if #Plan == 0 then Library:Notify("沒有需要處理的物品（" .. Mode .. "）。", 5); return end
-    if Method == "Recycle" then
-        Remotes:WaitForChild("Recycler_Recycle", 5):FireServer(Plan)
-    else
-        Remotes:WaitForChild("Drops_SellItems", 5):InvokeServer(Plan)
-    end
-    Library:Notify("已送出" .. (Method == "Recycle" and "回收" or "出售") .. "請求，共 " .. #Plan
-        .. " 件（" .. Mode .. "）。請重新掃描確認背包。", 7)
+    return
+
 end
 
 local function RecycleFromInventory(Method, SelectedItems, PreviewOnly)
@@ -3347,7 +3374,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2測試 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 測試2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
