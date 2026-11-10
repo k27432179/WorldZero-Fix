@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D3-retry-10s startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D3-retry-3s startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1603,7 +1603,7 @@ local function ReplayDungeonLoop(Mission, Difficulty)
             and SV.WZFTransitionAttempt == Attempt and game.JobId == SourceJob
             and SV.TransitionMission == Mission and SV.TransitionDifficulty == Difficulty
     end
-    task.delay(10, function()
+    task.delay(3, function()
         if not StillOwnsRequest() then return end
         if SV.WZFTeleportStarted then
             SV.TransitionUnconfirmed = true
@@ -1624,7 +1624,7 @@ local function ReplayDungeonLoop(Mission, Difficulty)
             return
         end
         print("[WZF][D3] automatic retry 1/1 sent; same destination:", Mission, tostring(Difficulty), "job:", SourceJob)
-        task.delay(10, function()
+        task.delay(3, function()
             if not StillOwnsRequest() then return end
             SV.TransitionUnconfirmed = true
             warn("[WZF][D3] retry budget exhausted; no further automatic resend; mission:", Mission, "job:", SourceJob)
@@ -3246,7 +3246,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/10",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
