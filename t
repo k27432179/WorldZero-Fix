@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B3-rejoin-route-fix startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D2-single-destination startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1574,6 +1574,16 @@ local function ReplayDungeonLoop(Mission, Difficulty)
     SV.TransitionPending = true
     SV.TransitionMission = Mission
     SV.TransitionDifficulty = Difficulty
+    SV.TransitionUnconfirmed = false
+    SV.WZFTransitionAttempt = (SV.WZFTransitionAttempt or 0) + 1
+    local Attempt = SV.WZFTransitionAttempt
+    task.delay(45, function()
+        if ScriptUnloaded or not SV or not SV.TransitionPending or SV.WZFTransitionAttempt ~= Attempt then return end
+        -- No automatic retry or recovery teleport: sending is not acknowledgement.
+        SV.TransitionUnconfirmed = true
+        warn("[WZF][D2] transition still unconfirmed after 45s; no automatic resend; mission:",
+            tostring(SV.TransitionMission), "job:", game.JobId)
+    end)
 
     local Success, Result = pcall(function()
         local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
@@ -1599,8 +1609,22 @@ local function ReplayDungeonLoop(Mission, Difficulty)
     return true
 end
 
+-- Observe explicit teleport failures without stopping workers on request submission.
+ConnectionTable["WZFTeleportInitFailed"] = TeleportService.TeleportInitFailed:Connect(function(Player, Result, Message, PlaceId)
+    if Player ~= LocalPlayer or ScriptUnloaded or not SV or not SV.TransitionPending then return end
+    warn("[WZF][D2] teleport initialization failed:", tostring(Result), tostring(Message), "place:", PlaceId, "job:", game.JobId)
+    SV.TransitionPending = false
+    SV.TransitionMission = nil
+    SV.TransitionDifficulty = nil
+    -- Await manual action after a confirmed failure; avoid the stuck monitor sending us to hub.
+    SV.TransitionUnconfirmed = true
+end)
 SetGlobal("rejoin last dungeon")
 local function RejoinLastDungeon(DoRejoin)
+    if DoRejoin and (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
+        warn("[WZF][D2] recovery-to-hub suppressed during unresolved transition; job:", game.JobId)
+        return
+    end
     if SV.CreatingRejoinFile then
         return
     end
@@ -1672,6 +1696,9 @@ end
 
 SetGlobal("restart dungeon")
 local function RestartDungeon(RestartBypass)
+    if SV.RestartSelecting or SV.TransitionPending then return end
+    SV.RestartSelecting = true
+    local Success, Result = pcall(function()
     if SV.TransitionPending then
         return -- A destination has already been requested in this client.
     end
@@ -1688,19 +1715,18 @@ local function RestartDungeon(RestartBypass)
         return
     end
     Library:Notify("Teleporting...", SV.RestartDungeonDelay)
-    KillSwitch = true
     task.wait(SV.RestartDungeonDelay)
     if IsTower then
         Difficulty = nil
     end
     if GetLives() == 0 then
-        ReplayDungeonLoop(ISV.MissionId, Difficulty)
+        return ReplayDungeonLoop(ISV.MissionId, Difficulty)
     end
     if SV.DoingGuildDungeon and not SV.IsNightmareDungeon then
         if not (ISV.MissionId == 42 and Difficulty == 5) then
             if Difficulty == 1 and not IsTower then
                 Library:Notify("Moving to challenge mode", 1)
-                ReplayDungeonLoop(ISV.MissionId, 5)
+                return ReplayDungeonLoop(ISV.MissionId, 5)
             else
                 local NextDungeon
                 for DungeonIndex, Dungeon in SV.DungeonListTable do
@@ -1712,9 +1738,9 @@ local function RestartDungeon(RestartBypass)
                 local NextDungeonReference = SV.DungeonListTable[NextDungeon]
                 Library:Notify("Moving to " ..NextDungeonReference.DungeonName, 1)
                 if NextDungeonReference.Level > 0 then
-                    ReplayDungeonLoop(NextDungeonReference.DungeonID, 1)
+                    return ReplayDungeonLoop(NextDungeonReference.DungeonID, 1)
                 else
-                    ReplayDungeonLoop(NextDungeonReference.DungeonID, nil)
+                    return ReplayDungeonLoop(NextDungeonReference.DungeonID, nil)
                 end
             end
         else
@@ -1723,13 +1749,13 @@ local function RestartDungeon(RestartBypass)
                 Library:Notify("Finished doing all dungeons", 9999999999999999)
                 return
             elseif RestartChoice == "Loop" then
-                ReplayDungeonLoop(38, nil)
+                return ReplayDungeonLoop(38, nil)
             elseif RestartChoice == "Loop w/o inf" then
-                ReplayDungeonLoop(21, nil)
+                return ReplayDungeonLoop(21, nil)
             elseif RestartChoice == "Loop w/o towers" then
-                ReplayDungeonLoop(1, 1)
+                return ReplayDungeonLoop(1, 1)
             elseif RestartChoice == "Play nightmare dungeons" then
-                ReplayDungeonLoop(1005, 6)
+                return ReplayDungeonLoop(1005, 6)
             end
         end
     end
@@ -1759,7 +1785,7 @@ local function RestartDungeon(RestartBypass)
                 end
             end
         end
-        ReplayDungeonLoop(SelectedDungeon, Difficulty)
+        return ReplayDungeonLoop(SelectedDungeon, Difficulty)
     end
     if SV.AutoLeveling and not IsEventDungeon then
         local CheckPartySize = Players:GetChildren()
@@ -1781,14 +1807,20 @@ local function RestartDungeon(RestartBypass)
                 else
                     Library:Notify("Moving to: " ..AutoLevelingDungeon.DungeonName, 2)
                 end
-                ReplayDungeonLoop(AutoLevelingDungeon.DungeonID, 5)
+                return ReplayDungeonLoop(AutoLevelingDungeon.DungeonID, 5)
             end
         end
     end
     if SV.RandomNightmareDungeon and SV.IsNightmareDungeon then
-        ISV.MissionId = SV.RandomNightmareDungeon
+        return ReplayDungeonLoop(SV.RandomNightmareDungeon, Difficulty)
     end
-    ReplayDungeonLoop(ISV.MissionId, Difficulty)
+    return ReplayDungeonLoop(ISV.MissionId, Difficulty)
+    end)
+    SV.RestartSelecting = false
+    if not Success then
+        warn("[WZF][D2] restart selection failed:", tostring(Result), "job:", game.JobId)
+    end
+    return Success and Result
 end
 
 SetGlobal("collect chests")
@@ -1813,12 +1845,14 @@ local function CollectChests()
             end
 
             local ChestPrize
+            print("[WZF][D2-CHEST] request:", ChestIndex, "job:", game.JobId)
             if ChestIndex == 1 then
                 ChestPrize = MissionPrize:InvokeServer(true)
             else
                 ChestPrize = MissionPrize:InvokeServer()
             end
 
+            print("[WZF][D2-CHEST] returned:", ChestIndex, "type:", typeof(ChestPrize), "truthy:", not not ChestPrize, "job:", game.JobId)
             if ChestPrize then
                 if rItems then
                     ChestPrize = rItems[tostring(ChestPrize)].DisplayKey
@@ -2026,6 +2060,7 @@ local function ConnectMissionFinished()
                     ))
                 end
             until SellItemCheck == 0 and EquipInProgress == 0
+            print("[WZF][D2] completion reached restart; sell:", SellItemCheck, "equip:", EquipInProgress, "job:", game.JobId)
             RestartDungeon()
         end)
     end
@@ -3174,7 +3209,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/10",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -5251,6 +5286,12 @@ FirstTab:AddButton({
             DoubleClick = true,
             Func = function()
                 if IsDungeon then
+                    if SV.RestartSelecting then return end
+                    if SV.TransitionPending or SV.TransitionUnconfirmed then
+                        warn("[WZF][D2] user requested manual retry; previous request may still complete; job:", game.JobId)
+                        SV.TransitionPending = false
+                        SV.TransitionUnconfirmed = false
+                    end
                     ReplayDungeonLoop(ISV.MissionId, ISV.LoggedDifficulty)
                 end
             end
@@ -5879,7 +5920,9 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if not HoldForRealTime then
+                    if SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed then
+                        CombatTimer = 0
+                    elseif not HoldForRealTime then
                         task.wait(1)
                         local Healthproperties = PlayerCharacter:FindFirstChild("HealthProperties", true)
                         local OutOfCombat = Healthproperties and Healthproperties:FindFirstChild("OutOfCombat", true)
@@ -5890,7 +5933,7 @@ if IsDungeon then
                                 CombatTimer = 0
                             end
                         end
-                        if CombatTimer >= StuckDelay then
+                        if CombatTimer >= StuckDelay and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
                             KillSwitch = true
                             task.wait(2)
                             task.spawn(function()
