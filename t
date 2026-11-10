@@ -4559,7 +4559,7 @@ FifthTab:AddToggle("KeepTenPerSpecialHex", {
     Tooltip = "關閉：特殊色全部保留。開啟：只在你選取的物品中，每色各留10件；未選取物品不占名額。開關本身不會處理物品。"
 })
 FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。\n切記單一裝備進行回收
-\n若一次回收多種裝備;只會從多種裝備保留十件", true)
+\n若一次回收多種裝備，\n只會從多種裝備保留十件。\n回收完畢務必清除選取。", true)
 FifthTab:AddButton({
     Text = "預覽處理數量（不回收）",
     Func = function()
