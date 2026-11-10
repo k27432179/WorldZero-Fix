@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D2-single-destination startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D3-bounded-retry startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1545,9 +1545,8 @@ end
 
 SetGlobal("replay dungeon loop")
 local function ReplayDungeonLoop(Mission, Difficulty)
-    -- B2: only one destination and one request per running client.
-    -- A successful FireServer means the request was sent, NOT that the server
-    -- accepted the teleport. Never auto-retry without server confirmation.
+    -- One destination per transition. At most one delayed automatic resend.
+    -- A local send is not confirmation that the server accepted the request.
     if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
         warn("[WZF] Invalid mission ID for replay:", tostring(Mission))
         return false
@@ -1577,13 +1576,8 @@ local function ReplayDungeonLoop(Mission, Difficulty)
     SV.TransitionUnconfirmed = false
     SV.WZFTransitionAttempt = (SV.WZFTransitionAttempt or 0) + 1
     local Attempt = SV.WZFTransitionAttempt
-    task.delay(45, function()
-        if ScriptUnloaded or not SV or not SV.TransitionPending or SV.WZFTransitionAttempt ~= Attempt then return end
-        -- No automatic retry or recovery teleport: sending is not acknowledgement.
-        SV.TransitionUnconfirmed = true
-        warn("[WZF][D2] transition still unconfirmed after 45s; no automatic resend; mission:",
-            tostring(SV.TransitionMission), "job:", game.JobId)
-    end)
+    SV.WZFTeleportStarted = false
+    SV.WZFAutoRetryCount = 0
 
     local Success, Result = pcall(function()
         local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
@@ -1602,18 +1596,61 @@ local function ReplayDungeonLoop(Mission, Difficulty)
         return false
     end
 
-    -- Keep locked until a fresh script instance in the destination server.
-    -- If the server rejects the transition silently, restart this test session
-    -- before another manual attempt; automatic re-send is deliberately disabled.
-    print("[WZF] Dungeon transition request sent once:", Mission, tostring(Difficulty), "job:", game.JobId)
+    print("[WZF][D3] initial request sent:", Mission, tostring(Difficulty), "job:", game.JobId)
+    local SourceJob = game.JobId
+    local function StillOwnsRequest()
+        return not ScriptUnloaded and SV and SV.TransitionPending
+            and SV.WZFTransitionAttempt == Attempt and game.JobId == SourceJob
+            and SV.TransitionMission == Mission and SV.TransitionDifficulty == Difficulty
+    end
+    task.delay(45, function()
+        if not StillOwnsRequest() then return end
+        if SV.WZFTeleportStarted then
+            SV.TransitionUnconfirmed = true
+            warn("[WZF][D3] teleport has started; automatic resend skipped; job:", SourceJob)
+            return
+        end
+        -- Keep the original lock and captured destination. Never re-run selection.
+        SV.WZFAutoRetryCount = 1
+        local RetryOK, RetryError = pcall(function()
+            local Remote = Remotes and Remotes:FindFirstChild("Teleport_StartRaid")
+            assert(Remote, "Teleport_StartRaid no longer available")
+            Remote:FireServer(Mission, Difficulty)
+        end)
+        if not StillOwnsRequest() then return end
+        if not RetryOK then
+            SV.TransitionUnconfirmed = true
+            warn("[WZF][D3] automatic resend failed; stopped;", tostring(RetryError), "job:", SourceJob)
+            return
+        end
+        print("[WZF][D3] automatic retry 1/1 sent; same destination:", Mission, tostring(Difficulty), "job:", SourceJob)
+        task.delay(45, function()
+            if not StillOwnsRequest() then return end
+            SV.TransitionUnconfirmed = true
+            warn("[WZF][D3] retry budget exhausted; no further automatic resend; mission:", Mission, "job:", SourceJob)
+            if Library and not Library.Unloaded then
+                Library:Notify("傳送仍未完成，自動重試已停止。請查看主控台或使用強制重開地下城。", 15)
+            end
+        end)
+    end)
     return true
 end
 
+-- Do not resend after Roblox has reported that this client is teleporting.
+ConnectionTable["WZFTeleportState"] = LocalPlayer.OnTeleport:Connect(function(State)
+    if ScriptUnloaded or not SV or not SV.TransitionPending then return end
+    print("[WZF][D3] teleport state:", tostring(State), "job:", game.JobId)
+    if State == Enum.TeleportState.Started or State == Enum.TeleportState.WaitingForServer
+        or State == Enum.TeleportState.InProgress then
+        SV.WZFTeleportStarted = true
+    end
+end)
 -- Observe explicit teleport failures without stopping workers on request submission.
 ConnectionTable["WZFTeleportInitFailed"] = TeleportService.TeleportInitFailed:Connect(function(Player, Result, Message, PlaceId)
     if Player ~= LocalPlayer or ScriptUnloaded or not SV or not SV.TransitionPending then return end
     warn("[WZF][D2] teleport initialization failed:", tostring(Result), tostring(Message), "place:", PlaceId, "job:", game.JobId)
     SV.TransitionPending = false
+    SV.WZFTeleportStarted = false
     SV.TransitionMission = nil
     SV.TransitionDifficulty = nil
     -- Await manual action after a confirmed failure; avoid the stuck monitor sending us to hub.
@@ -3209,7 +3246,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/0999999999999",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/0966666666666666",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
