@@ -3399,7 +3399,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 測試測試測試2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/1199999999",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4558,7 +4558,7 @@ FifthTab:AddToggle("KeepTenPerSpecialHex", {
     Default = false,
     Tooltip = "關閉：特殊色全部保留。開啟：只在你選取的物品中，每色各留10件；未選取物品不占名額。開關本身不會處理物品。"
 })
-FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。", true)
+FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。\n切記單一服裝皮膚進行回收，\n若是多種服裝皮膚一起回收，\n則會造成多種服裝皮膚只保留10件\n回收後務必按下清除選取。", true)。
 FifthTab:AddButton({
     Text = "預覽處理數量（不回收）",
     Func = function()
