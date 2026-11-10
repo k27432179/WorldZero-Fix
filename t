@@ -2913,7 +2913,7 @@ function HexRetention.Patterns()
     return Patterns
 end
 
--- Pure planner: protection and items outside the selection consume the quota first.
+-- Count only selected items. Unselected items never consume their retention quota.
 function HexRetention.Plan(Records, Limited)
     table.sort(Records, function(A, B)
         local RankA = A.Protected and 1 or (not A.Selected and 2 or 3)
@@ -2925,7 +2925,7 @@ function HexRetention.Plan(Records, Limited)
     local SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = 0, 0, 0, 0
     for _, Record in ipairs(Records) do
         local Keep = Record.Protected or not Record.Selected
-        if Record.Special then
+        if Record.Special and Record.Selected then
             Counts[Record.Hex] = (Counts[Record.Hex] or 0) + 1
             Keep = Keep or not Limited or Counts[Record.Hex] <= 10
             if Keep then KeptSpecial = KeptSpecial + 1 end
@@ -2934,6 +2934,23 @@ function HexRetention.Plan(Records, Limited)
         if Record.Selected and not Keep then
             table.insert(Plan, {UUID = Record.UUID, Name = Record.Name})
             if Record.Special then SpecialExcess = SpecialExcess + 1 else Ordinary = Ordinary + 1 end
+        end
+    end
+    -- Enforce retention independently of the running quota before exposing a plan.
+    local Planned, SelectedByHex, RemainingByHex = {}, {}, {}
+    for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
+    for _, Record in ipairs(Records) do
+        if Record.Selected and Record.Special then
+            SelectedByHex[Record.Hex] = (SelectedByHex[Record.Hex] or 0) + 1
+            if not Planned[Record.UUID] then
+                RemainingByHex[Record.Hex] = (RemainingByHex[Record.Hex] or 0) + 1
+            end
+        end
+    end
+    for Hex, Total in pairs(SelectedByHex) do
+        local Minimum = Limited and math.min(10, Total) or Total
+        if (RemainingByHex[Hex] or 0) < Minimum then
+            error("retention invariant failed")
         end
     end
     return Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected
@@ -3030,7 +3047,7 @@ function HexRetention.Run(Method, SelectedItems, PreviewOnly)
                 Row.Other = Row.Other + 1
             end
         end
-        warn("[WZF][KEEP10] 只讀診斷 stop-v1；模式:", Mode)
+        warn("[WZF][KEEP10] 只讀診斷 selected-v2；模式:", Mode)
         local Colors = {}
         for Color, Row in pairs(Stats) do
             if Row.Selected > 0 then table.insert(Colors, Color) end
@@ -3374,7 +3391,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 測試2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2測試測試 2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
