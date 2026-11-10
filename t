@@ -790,7 +790,7 @@ SV.SpecialHexColors = {
     "b00000", "bbaadd", "c0aa11", "00bdae", "55eeaa",
     "ffaded", "beeeee", "ffaaee", "ac11dd", "acce55",
     "ff0011", "decade", "deeeed", "deeee1", "b1a2ed",
-    "aaaaaa"
+    "aaaaaa", "arcane", "blazed"
 }
 SV.EggList = {
     'StarEgg', 'JungleEgg', 'CrystalEgg', 'ChristmasEgg', 'DesertEgg',
@@ -3369,7 +3369,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09111111111111111111111",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09222222222222",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
