@@ -2933,14 +2933,35 @@ local function LimitedColorRecycle(Method, SelectedItems, PreviewOnly)
             end
         end
         if not ColorOk then
-            -- Types only: never stringify values, item IDs, or arbitrary table keys.
+            -- Diagnostic conversion only; never change Data or ColorOk.
             pcall(function()
+                warn("[WZF][HEX] 診斷版本: range-v2")
                 warn("[WZF][HEX] 色碼資料異常；LiveItem.d typeof:", typeof(Data))
                 local Keys = {}
                 for _, Channel in ipairs({"r", "g", "b"}) do
                     local ChannelValue
                     if type(Data) == "table" then ChannelValue = rawget(Data, Channel) end
                     warn("[WZF][HEX] " .. Channel .. " typeof:", typeof(ChannelValue))
+                    local NumericValue
+                    if type(ChannelValue) == "number" then
+                        NumericValue = ChannelValue
+                    elseif type(ChannelValue) == "string" and #ChannelValue <= 128 then
+                        NumericValue = tonumber(ChannelValue)
+                    end
+                    local Finite = type(NumericValue) == "number"
+                        and NumericValue == NumericValue and math.abs(NumericValue) < math.huge
+                    local Range = "無法轉成有限數字"
+                    if Finite then
+                        if NumericValue >= 0 and NumericValue <= 1 then
+                            Range = "0～1（同時也在0～255內；單憑此值無法判定尺度）"
+                        elseif NumericValue > 1 and NumericValue <= 255 then
+                            Range = "大於1且不超過255"
+                        else
+                            Range = "超出0～255"
+                        end
+                    end
+                    warn("[WZF][HEX] " .. Channel .. " 可轉有限數字:", Finite == true,
+                        "範圍分類:", Range)
                 end
                 if type(Data) == "table" then
                     local SchemaNames = {r = true, g = true, b = true, R = true, G = true, B = true,
@@ -3395,7 +3416,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/1199999999",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
