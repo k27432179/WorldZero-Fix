@@ -2957,10 +2957,6 @@ function HexRetention.Plan(Records, Limited)
 end
 
 function HexRetention.Run(Method, SelectedItems, PreviewOnly)
-    if PreviewOnly ~= true then
-        Library:Notify("此版本已停用批次回收與出售，請只使用預覽。", 8)
-        return
-    end
     if Method ~= "Recycle" and Method ~= "Gold" then return end
     if type(SelectedItems) ~= "table" or type(SV.RealCosmeticTable) ~= "table" then
         Library:Notify("請先掃描外觀，再選取要處理的外觀。", 5)
@@ -3047,7 +3043,7 @@ function HexRetention.Run(Method, SelectedItems, PreviewOnly)
                 Row.Other = Row.Other + 1
             end
         end
-        warn("[WZF][KEEP10] 只讀診斷 selected-v2；模式:", Mode)
+        warn("[WZF][KEEP10] 預覽版本 selected-v3；模式:", Mode)
         local Colors = {}
         for Color, Row in pairs(Stats) do
             if Row.Selected > 0 then table.insert(Colors, Color) end
@@ -3065,8 +3061,20 @@ function HexRetention.Run(Method, SelectedItems, PreviewOnly)
             .. " 件。選取中受保護 " .. ProtectedSelected .. " 件。沒有出售或回收。", 12)
         return
     end
-    return
-
+    if #Plan == 0 then
+        Library:Notify("沒有需要處理的物品（" .. Mode .. "）。", 5)
+        return
+    end
+    -- No yielding wait between the completed plan validation and the send.
+    local Remote = Remotes:FindFirstChild(Method == "Recycle" and "Recycler_Recycle" or "Drops_SellItems")
+    if not Remote then Library:Notify("找不到處理功能，已停止操作。", 5); return end
+    if Method == "Recycle" then
+        Remote:FireServer(Plan)
+    else
+        Remote:InvokeServer(Plan)
+    end
+    Library:Notify("已送出" .. (Method == "Recycle" and "回收" or "出售") .. "請求，共 " .. #Plan
+        .. " 件。請重新掃描確認實際結果。", 8)
 end
 
 local function RecycleFromInventory(Method, SelectedItems, PreviewOnly)
@@ -3391,7 +3399,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2測試測試 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 測試測試測試2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4546,11 +4554,11 @@ FourthTab:AddButton({
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
 FifthTab:AddToggle("KeepTenPerSpecialHex", {
-    Text = "每個特殊色碼只保留 10 件",
+    Text = "選取物品中：每個特殊色碼保留 10 件",
     Default = false,
-    Tooltip = "關閉：全部保留。開啟：每個完整特殊色碼分別保留 10 件。開關本身不會出售或回收。"
+    Tooltip = "關閉：特殊色全部保留。開啟：只在你選取的物品中，每色各留10件；未選取物品不占名額。開關本身不會處理物品。"
 })
-FifthTab:AddLabel("關閉＝全部保留；開啟＝每色保留10件。\n上鎖、收藏不處理，可能保留超過10件。\n只處理你在「外觀」分頁選取的物品。", true)
+FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。", true)
 FifthTab:AddButton({
     Text = "預覽處理數量（不回收）",
     Func = function()
