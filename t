@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D3-bounded-retry startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D3-retry-3s startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1603,7 +1603,7 @@ local function ReplayDungeonLoop(Mission, Difficulty)
             and SV.WZFTransitionAttempt == Attempt and game.JobId == SourceJob
             and SV.TransitionMission == Mission and SV.TransitionDifficulty == Difficulty
     end
-    task.delay(45, function()
+    task.delay(3, function()
         if not StillOwnsRequest() then return end
         if SV.WZFTeleportStarted then
             SV.TransitionUnconfirmed = true
@@ -1624,7 +1624,7 @@ local function ReplayDungeonLoop(Mission, Difficulty)
             return
         end
         print("[WZF][D3] automatic retry 1/1 sent; same destination:", Mission, tostring(Difficulty), "job:", SourceJob)
-        task.delay(45, function()
+        task.delay(3, function()
             if not StillOwnsRequest() then return end
             SV.TransitionUnconfirmed = true
             warn("[WZF][D3] retry budget exhausted; no further automatic resend; mission:", Mission, "job:", SourceJob)
@@ -2876,7 +2876,156 @@ local function BuildShopValues(TargetDropdown, TargetShop)
 end
 
 SetGlobal("mass item sell")
+-- WZF dual-mode rebuild: preview and live processing share this read-only planner.
+local function LimitedColorRecycle(Method, SelectedItems, PreviewOnly)
+    if Method ~= "Recycle" and Method ~= "Gold" then return end
+    if type(SelectedItems) ~= "table" or not SV.CanRequire then
+        Library:Notify("請先掃描並選取外觀；此功能需要 require()。", 5)
+        return
+    end
+    local Success, LiveInventory = pcall(function()
+        return Remotes.Profile_GetCosmetics:InvokeServer()
+    end)
+    if not Success or type(LiveInventory) ~= "table" then
+        Library:Notify("無法確認最新背包，已停止操作。", 5)
+        return
+    end
+    local ItemSuccess, Definitions = pcall(require, Items)
+    if not ItemSuccess or type(Definitions) ~= "table" then
+        Library:Notify("無法確認物品定義，已停止操作。", 5)
+        return
+    end
+    local ById, Patterns = {}, {}
+    for Name, Definition in pairs(Definitions) do
+        if type(Definition) == "table" and Definition.ID ~= nil
+            and Definition.Type ~= "Emote" and Definition.Type ~= "Title"
+            and Definition.Type ~= "Furniture" and Definition.Type ~= "Consumable" then
+            ById[Definition.ID] = {Name = Name, VisualName = tostring(Definition.DisplayKey)}
+        end
+    end
+    for _, Hex in ipairs(SV.SpecialHexColors) do table.insert(Patterns, Hex) end
+    local Input = Options.SaveUserHexesInput and Options.SaveUserHexesInput.Value or ""
+    for Pattern in string.gmatch(string.lower(tostring(Input)):gsub("#", ""), "[^,]+") do
+        Pattern = Pattern:match("^%s*(.-)%s*$")
+        if Pattern ~= "" then
+            if not pcall(string.match, "000000", "^" .. Pattern) then
+                Library:Notify("保留色碼規則無效，已停止操作。", 5)
+                return
+            end
+            table.insert(Patterns, Pattern)
+        end
+    end
+    local Records, Seen = {}, {}
+    for _, LiveItem in pairs(LiveInventory) do
+        if type(LiveItem) ~= "table" then
+            Library:Notify("背包物品資料異常，已停止操作。", 5)
+            return
+        end
+        local Data = rawget(LiveItem, "d")
+        local ColorOk = Data == nil
+        if type(Data) == "table" then
+            ColorOk = true
+            for _, Channel in ipairs({"r", "g", "b"}) do
+                local Value = rawget(Data, Channel)
+                if type(Value) ~= "number" or Value ~= Value or Value < 0 or Value > 1 then
+                    ColorOk = false
+                end
+            end
+        end
+        if not ColorOk then
+            -- Types only: never stringify values, item IDs, or arbitrary table keys.
+            pcall(function()
+                warn("[WZF][HEX] 色碼資料異常；LiveItem.d typeof:", typeof(Data))
+                local Keys = {}
+                for _, Channel in ipairs({"r", "g", "b"}) do
+                    local ChannelValue
+                    if type(Data) == "table" then ChannelValue = rawget(Data, Channel) end
+                    warn("[WZF][HEX] " .. Channel .. " typeof:", typeof(ChannelValue))
+                end
+                if type(Data) == "table" then
+                    local SchemaNames = {r = true, g = true, b = true, R = true, G = true, B = true,
+                        red = true, green = true, blue = true, Red = true, Green = true, Blue = true,
+                        Color = true, color = true, Color3 = true, rgb = true, RGB = true,
+                        hex = true, Hex = true, value = true, Value = true, a = true, alpha = true}
+                    for Key in next, Data do
+                        -- Only known schema names are printable; arbitrary keys may be identifiers.
+                        if type(Key) == "string" and SchemaNames[Key] then
+                            table.insert(Keys, Key)
+                        else
+                            table.insert(Keys, "<欄位名稱已遮蔽>")
+                        end
+                    end
+                    table.sort(Keys)
+                    warn("[WZF][HEX] 欄位:", table.concat(Keys, ", "))
+                end
+            end)
+            Library:Notify("背包色碼資料格式異常，為避免誤回收已取消操作。", 5)
+            return
+        end
+        local Ref = ById[LiveItem.id]
+        if Ref then
+            if type(LiveItem.uuid) ~= "string" or LiveItem.uuid == "" or Seen[LiveItem.uuid] then
+                Library:Notify("背包物品識別資料異常，已停止操作。", 5)
+                return
+            end
+            Seen[LiveItem.uuid] = true
+            local Hex = Data and Color3.new(rawget(Data, "r"), rawget(Data, "g"), rawget(Data, "b")):ToHex():lower()
+            local Special = false
+            if Hex then
+                for _, Pattern in ipairs(Patterns) do
+                    if string.match(Hex, "^" .. Pattern) then Special = true; break end
+                end
+            end
+            -- The supplied base has no verified equipped schema. Unknown stays protected.
+            -- No guessed field alias is accepted as evidence that an item is unequipped.
+            local Protected = LiveItem.lock ~= nil and LiveItem.lock ~= false
+                or LiveItem.fav ~= nil and LiveItem.fav ~= false
+            table.insert(Records, {UUID = LiveItem.uuid, Name = Ref.Name,
+                Selected = SelectedItems[Ref.VisualName] == true, Hex = Hex,
+                Special = Special, Protected = Protected, EquipmentUnknown = true})
+        end
+    end
+    table.sort(Records, function(A, B)
+        if A.Protected ~= B.Protected then return A.Protected end
+        if A.Selected ~= B.Selected then return not A.Selected end
+        return A.UUID < B.UUID
+    end)
+    local Counts, Plan = {}, {}
+    local Excess, Unknown = 0, 0
+    for _, Record in ipairs(Records) do
+        local Keep = Record.Protected or not Record.Selected
+        if Record.Special then
+            Counts[Record.Hex] = (Counts[Record.Hex] or 0) + 1
+            Keep = Keep or Counts[Record.Hex] <= 10
+        end
+        if Record.Selected and not Keep then
+            Excess = Excess + 1
+            if Record.EquipmentUnknown then
+                Unknown = Unknown + 1
+            else
+                table.insert(Plan, {UUID = Record.UUID, Name = Record.Name})
+            end
+        end
+    end
+    if PreviewOnly then
+        Library:Notify("限量預覽：超額／一般色候選 " .. Excess
+            .. "；裝備狀態待確認保護 " .. Unknown .. "；可處理 " .. #Plan .. "。未出售或回收。", 10)
+        return
+    end
+    if Unknown > 0 then
+        Library:Notify("無法確認外觀裝備狀態，已停止操作；請先使用預覽。", 7)
+        return
+    end
+    if #Plan == 0 then Library:Notify("沒有可安全處理的物品。", 5); return end
+    -- Fail closed until the live equipped schema has been verified.
+    Library:Notify("限量模式目前僅供安全預覽，尚未啟用實際出售或回收。", 7)
+    return
+end
+
 local function RecycleFromInventory(Method, SelectedItems)
+    if Toggles.LimitedColorMode and Toggles.LimitedColorMode.Value then
+        return LimitedColorRecycle(Method, SelectedItems, false)
+    end
     local HexesToSave = {}
     local AddHexes = Options.SaveUserHexesInput.Value
     if AddHexes then
@@ -3246,7 +3395,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/0966666666666666",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4380,6 +4529,26 @@ FourthTab:AddButton({
 })
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
+FifthTab:AddToggle("LimitedColorMode", {
+    Text = "限量保留：每種特殊色碼最多 10 件（安全預覽版）",
+    Default = false,
+    Tooltip = "關閉：原版全部保留。開啟：全背包每個完整色碼計數；裝備狀態未確認時停止實際處理。"
+})
+FifthTab:AddLabel("限量模式目前僅供預覽：底版沒有可驗證的外觀裝備狀態，實際處理會安全中止。", true)
+FifthTab:AddButton({
+    Text = "預覽限量處理",
+    Func = function()
+        if not (IsDungeon or IsWorld) then return end
+        local SelectedItems = {}
+        local Selection = Options.CosmeticDropdown.Value
+        if type(Selection) == "table" then
+            for Key, Value in pairs(Selection) do
+                if Value then SelectedItems[Key] = true end
+            end
+        end
+        LimitedColorRecycle("Recycle", SelectedItems, true)
+    end
+})
 local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
 local UserEnteredHexes = FifthTab:AddLabel("已保留的色碼：\n無\n＋（所有特殊色碼）", true)
     FifthTab:AddDivider()
