@@ -2956,14 +2956,34 @@ local function LimitedColorRecycle(Method, SelectedItems, HexesToSave)
         local Dye, ColorOk = nil, true
         if LiveItem.d ~= nil then
             local Data = LiveItem.d
-            if type(Data) ~= "table" or type(Data.r) ~= "number"
-                or type(Data.g) ~= "number" or type(Data.b) ~= "number" then
+            if type(Data) ~= "table" then
                 ColorOk = false
             else
-                local Parsed, Value = pcall(function()
-                    return string.lower(Color3.new(Data.r, Data.g, Data.b):ToHex())
-                end)
-                if Parsed then Dye = Value else ColorOk = false end
+                -- World Zero may supply RGB channels as numeric strings.
+                -- Do not guess unknown 0-255 formats or clamp invalid values:
+                -- an uncertain color must never be treated as recyclable.
+                local R = tonumber(Data.r)
+                local G = tonumber(Data.g)
+                local B = tonumber(Data.b)
+                local function ValidChannel(Value)
+                    return type(Value) == "number"
+                        and Value == Value
+                        and Value >= 0
+                        and Value <= 1
+                end
+
+                if ValidChannel(R) and ValidChannel(G) and ValidChannel(B) then
+                    local Parsed, Value = pcall(function()
+                        return string.lower(Color3.new(R, G, B):ToHex())
+                    end)
+                    if Parsed and type(Value) == "string" then
+                        Dye = Value
+                    else
+                        ColorOk = false
+                    end
+                else
+                    ColorOk = false
+                end
             end
         end
         if not ColorOk then
@@ -3454,7 +3474,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/09 123456789",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/098888888888888",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
