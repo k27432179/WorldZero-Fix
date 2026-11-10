@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] B3-rejoin-route-fix startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D2-single-destination startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1574,6 +1574,16 @@ local function ReplayDungeonLoop(Mission, Difficulty)
     SV.TransitionPending = true
     SV.TransitionMission = Mission
     SV.TransitionDifficulty = Difficulty
+    SV.TransitionUnconfirmed = false
+    SV.WZFTransitionAttempt = (SV.WZFTransitionAttempt or 0) + 1
+    local Attempt = SV.WZFTransitionAttempt
+    task.delay(45, function()
+        if ScriptUnloaded or not SV or not SV.TransitionPending or SV.WZFTransitionAttempt ~= Attempt then return end
+        -- No automatic retry or recovery teleport: sending is not acknowledgement.
+        SV.TransitionUnconfirmed = true
+        warn("[WZF][D2] transition still unconfirmed after 45s; no automatic resend; mission:",
+            tostring(SV.TransitionMission), "job:", game.JobId)
+    end)
 
     local Success, Result = pcall(function()
         local Remote = Remotes and Remotes:WaitForChild("Teleport_StartRaid", 10)
@@ -1599,8 +1609,22 @@ local function ReplayDungeonLoop(Mission, Difficulty)
     return true
 end
 
+-- Observe explicit teleport failures without stopping workers on request submission.
+ConnectionTable["WZFTeleportInitFailed"] = TeleportService.TeleportInitFailed:Connect(function(Player, Result, Message, PlaceId)
+    if Player ~= LocalPlayer or ScriptUnloaded or not SV or not SV.TransitionPending then return end
+    warn("[WZF][D2] teleport initialization failed:", tostring(Result), tostring(Message), "place:", PlaceId, "job:", game.JobId)
+    SV.TransitionPending = false
+    SV.TransitionMission = nil
+    SV.TransitionDifficulty = nil
+    -- Await manual action after a confirmed failure; avoid the stuck monitor sending us to hub.
+    SV.TransitionUnconfirmed = true
+end)
 SetGlobal("rejoin last dungeon")
 local function RejoinLastDungeon(DoRejoin)
+    if DoRejoin and (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
+        warn("[WZF][D2] recovery-to-hub suppressed during unresolved transition; job:", game.JobId)
+        return
+    end
     if SV.CreatingRejoinFile then
         return
     end
@@ -1671,190 +1695,132 @@ do
 end
 
 SetGlobal("restart dungeon")
--- D1: choose ONE destination before sending ANY teleport request.
--- The old code could request the current mission when lives were 0, and
--- subsequently request a different prioritized nightmare mission.
-local function ChooseRestartDestination(Difficulty)
-    local CurrentMission = ISV.MissionId
+local function RestartDungeon(RestartBypass)
+    if SV.RestartSelecting or SV.TransitionPending then return end
+    SV.RestartSelecting = true
+    local Success, Result = pcall(function()
+    if SV.TransitionPending then
+        return -- A destination has already been requested in this client.
+    end
+    if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then 
+        return
+    end
+    if SV.TowerChestDelay then
+        task.wait(6)
+    end
+    local Difficulty = GetDifficulty()
+    if not PartyLeaderCheck() then
+        Remotes:WaitForChild("Missions_LeaveChoice", math.huge):FireServer(true)
+        Remotes:WaitForChild("Missions_NotifyReadyToLeave", math.huge):FireServer()
+        return
+    end
+    Library:Notify("Teleporting...", SV.RestartDungeonDelay)
+    task.wait(SV.RestartDungeonDelay)
     if IsTower then
         Difficulty = nil
     end
-
-    -- The guild sequence is a distinct, higher-priority mode.
+    if GetLives() == 0 then
+        return ReplayDungeonLoop(ISV.MissionId, Difficulty)
+    end
     if SV.DoingGuildDungeon and not SV.IsNightmareDungeon then
-        if not (CurrentMission == 42 and Difficulty == 5) then
+        if not (ISV.MissionId == 42 and Difficulty == 5) then
             if Difficulty == 1 and not IsTower then
                 Library:Notify("Moving to challenge mode", 1)
-                return CurrentMission, 5, "guild-challenge"
-            end
-            local NextDungeon
-            for DungeonIndex, Dungeon in SV.DungeonListTable do
-                if Dungeon.DungeonID == CurrentMission then
-                    NextDungeon = DungeonIndex - 1
-                    break
+                return ReplayDungeonLoop(ISV.MissionId, 5)
+            else
+                local NextDungeon
+                for DungeonIndex, Dungeon in SV.DungeonListTable do
+                    if Dungeon.DungeonID == ISV.MissionId then
+                        NextDungeon = DungeonIndex - 1
+                        break
+                    end
+                end
+                local NextDungeonReference = SV.DungeonListTable[NextDungeon]
+                Library:Notify("Moving to " ..NextDungeonReference.DungeonName, 1)
+                if NextDungeonReference.Level > 0 then
+                    return ReplayDungeonLoop(NextDungeonReference.DungeonID, 1)
+                else
+                    return ReplayDungeonLoop(NextDungeonReference.DungeonID, nil)
                 end
             end
-            local NextDungeonReference = NextDungeon and SV.DungeonListTable[NextDungeon]
-            if not NextDungeonReference then
-                warn("[WZF][D1] Guild destination not found; mission:", tostring(CurrentMission))
-                return nil, nil, "guild-destination-missing"
+        else
+            local RestartChoice = Options.DoAllDropdown.Value
+            if RestartChoice == "Stop" then
+                Library:Notify("Finished doing all dungeons", 9999999999999999)
+                return
+            elseif RestartChoice == "Loop" then
+                return ReplayDungeonLoop(38, nil)
+            elseif RestartChoice == "Loop w/o inf" then
+                return ReplayDungeonLoop(21, nil)
+            elseif RestartChoice == "Loop w/o towers" then
+                return ReplayDungeonLoop(1, 1)
+            elseif RestartChoice == "Play nightmare dungeons" then
+                return ReplayDungeonLoop(1005, 6)
             end
-            Library:Notify("Moving to " .. NextDungeonReference.DungeonName, 1)
-            if NextDungeonReference.Level > 0 then
-                return NextDungeonReference.DungeonID, 1, "guild-next"
-            end
-            return NextDungeonReference.DungeonID, nil, "guild-next"
         end
-        local RestartChoice = Options.DoAllDropdown.Value
-        if RestartChoice == "Stop" then
-            Library:Notify("Finished doing all dungeons", 9999999999999999)
-            return nil, nil, "guild-finished"
-        elseif RestartChoice == "Loop" then
-            return 38, nil, "guild-loop"
-        elseif RestartChoice == "Loop w/o inf" then
-            return 21, nil, "guild-loop-no-inf"
-        elseif RestartChoice == "Loop w/o towers" then
-            return 1, 1, "guild-loop-no-towers"
-        elseif RestartChoice == "Play nightmare dungeons" then
-            return 1005, 6, "guild-nightmare"
-        end
-        warn("[WZF][D1] Unknown guild restart choice:", tostring(RestartChoice))
-        return nil, nil, "guild-choice-unknown"
     end
-
-    -- Prioritized nightmare selection must be resolved before the fallback
-    -- current-dungeon replay. Never send an early request just because
-    -- GetLives() returned 0 during/after mission completion.
     if SV.IsNightmareDungeon and SV.PrioNmDCount and ISV.PlayerLevel == 175 then
-        local SelectedDungeon = CurrentMission
+        local GetCurrentDailyDungeon = Remotes:WaitForChild("Missions_GetCurrentDailyDungeon", math.huge):InvokeServer()
+        local SelectedDungeon = ISV.MissionId
         local SelectedDungeonSpecialPerk
         local SelectedDungeonLength = 9999
-        local CurrentDailyDungeon = Remotes:WaitForChild("Missions_GetCurrentDailyDungeon", 10)
-        if not CurrentDailyDungeon then
-            warn("[WZF][D1] Daily nightmare remote missing; no restart requested")
-            return nil, nil, "daily-remote-missing"
-        end
-        local Daily = CurrentDailyDungeon:InvokeServer()
-        if type(Daily) ~= "table" then
-            warn("[WZF][D1] Daily nightmare data invalid; no restart requested")
-            return nil, nil, "daily-data-invalid"
-        end
-        for _, Data in Daily do
-            if type(Data) == "table" then
-                local InternalID = Data.InternalID
-                for DungeonIndex in Options.PrioNmDropdown.Value do
-                    local DungeonData = SV.PrioritizedNightmareDungeons[DungeonIndex]
-                    if DungeonData and InternalID == DungeonData.ID then
-                        if DungeonData.SpecialPerk then
-                            if not SelectedDungeonSpecialPerk then
-                                SelectedDungeonSpecialPerk = true
-                                SelectedDungeon = Data.ID
-                                SelectedDungeonLength = DungeonData.Length
-                            elseif DungeonData.Length < SelectedDungeonLength then
-                                SelectedDungeon = Data.ID
-                                SelectedDungeonLength = DungeonData.Length
-                            end
-                        elseif not SelectedDungeonSpecialPerk and DungeonData.Length < SelectedDungeonLength then
+        for Index, Data in GetCurrentDailyDungeon do
+            local InternalID = Data.InternalID
+            for DungeonIndex in Options.PrioNmDropdown.Value do
+                local DungeonData = SV.PrioritizedNightmareDungeons[DungeonIndex]
+                if InternalID == DungeonData.ID then
+                    if DungeonData.SpecialPerk then
+                        if not SelectedDungeonSpecialPerk then
+                            SelectedDungeonSpecialPerk = true
+                            SelectedDungeon = Data.ID
+                            SelectedDungeonLength = DungeonData.Length
+                        elseif DungeonData.Length < SelectedDungeonLength then
                             SelectedDungeon = Data.ID
                             SelectedDungeonLength = DungeonData.Length
                         end
+                    elseif not SelectedDungeonSpecialPerk and DungeonData.Length < SelectedDungeonLength then
+                        SelectedDungeon = Data.ID
+                        SelectedDungeonLength = DungeonData.Length
                     end
                 end
             end
         end
-        return SelectedDungeon, Difficulty, "priority-nightmare"
+        return ReplayDungeonLoop(SelectedDungeon, Difficulty)
     end
-
-    -- Keep the original first-eligible leveling dungeon behavior while
-    -- avoiding a request for every eligible candidate in the loop.
     if SV.AutoLeveling and not IsEventDungeon then
         local CheckPartySize = Players:GetChildren()
         local LowestLevel = math.huge
         if #CheckPartySize > 1 then
-            for _, Player in CheckPartySize do
+            for Index, Player in CheckPartySize do
                 local MemberLevel = Player:GetAttribute("Level")
                 if MemberLevel and MemberLevel < LowestLevel then
                     LowestLevel = MemberLevel
                 end
             end
         else
-            LowestLevel = LocalPlayer:GetAttribute("Level") or 0
+            LowestLevel = LocalPlayer:GetAttribute("Level")
         end
-        for _, AutoLevelingDungeon in SV.DungeonListTable do
+        for Index, AutoLevelingDungeon in SV.DungeonListTable do
             if LowestLevel >= AutoLevelingDungeon.Level then
-                if AutoLevelingDungeon.DungeonID == CurrentMission then
-                    Library:Notify("Replaying: " .. AutoLevelingDungeon.DungeonName, 2)
+                if AutoLevelingDungeon.DungeonID == ISV.MissionId then
+                    Library:Notify("Replaying: " ..AutoLevelingDungeon.DungeonName, 2)
                 else
-                    Library:Notify("Moving to: " .. AutoLevelingDungeon.DungeonName, 2)
+                    Library:Notify("Moving to: " ..AutoLevelingDungeon.DungeonName, 2)
                 end
-                return AutoLevelingDungeon.DungeonID, 5, "auto-leveling"
+                return ReplayDungeonLoop(AutoLevelingDungeon.DungeonID, 5)
             end
         end
-        warn("[WZF][D1] No eligible leveling dungeon; no restart requested")
-        return nil, nil, "leveling-destination-missing"
     end
-
-    -- Use the configured nightmare pick without overwriting the actual
-    -- mission ID for the dungeon that the character is currently in.
     if SV.RandomNightmareDungeon and SV.IsNightmareDungeon then
-        return SV.RandomNightmareDungeon, Difficulty, "random-nightmare"
+        return ReplayDungeonLoop(SV.RandomNightmareDungeon, Difficulty)
     end
-
-    return CurrentMission, Difficulty, "replay-current"
-end
-
-local function RestartDungeon(RestartBypass)
-    if SV.TransitionPending or SV.TransitionSelecting then
-        print("[WZF][D1] Restart already selecting/sent; job:", game.JobId)
-        return
-    end
-    if not (SV.ReplayMission or SV.DoingGuildDungeon or RestartBypass) then
-        return
-    end
-    -- Lock before any yielding remote calls, so concurrent completion / UI
-    -- callbacks cannot independently choose two different destinations.
-    SV.TransitionSelecting = true
-    local Success, Result = pcall(function()
-        if SV.TowerChestDelay then
-            task.wait(6)
-        end
-        local Difficulty = GetDifficulty()
-        if not PartyLeaderCheck() then
-            Remotes:WaitForChild("Missions_LeaveChoice", 10):FireServer(true)
-            Remotes:WaitForChild("Missions_NotifyReadyToLeave", 10):FireServer()
-            return
-        end
-        local Mission, TargetDifficulty, Reason = ChooseRestartDestination(Difficulty)
-        if type(Mission) ~= "number" or Mission ~= Mission or Mission <= 0 or Mission == math.huge then
-            warn("[WZF][D1] Restart cancelled; destination invalid:",
-                tostring(Mission), "reason:", tostring(Reason), "job:", game.JobId)
-            return
-        end
-        print("[WZF][D1] Selected one restart destination:",
-            Mission, tostring(TargetDifficulty), "reason:", Reason,
-            "current:", tostring(ISV.MissionId), "job:", game.JobId)
-        Library:Notify("Teleporting...", SV.RestartDungeonDelay)
-        task.wait(tonumber(SV.RestartDungeonDelay) or 3)
-        if ScriptUnloaded or not SV or SV.TransitionPending then
-            return
-        end
-        if ReplayDungeonLoop(Mission, TargetDifficulty) then
-            -- Do not stop Autofarm until an actual request has been sent.
-            -- FireServer acceptance is not confirmed here.
-            KillSwitch = true
-        else
-            warn("[WZF][D1] Replay request not sent; Autofarm not stopped")
-        end
+    return ReplayDungeonLoop(ISV.MissionId, Difficulty)
     end)
-    if SV then
-        SV.TransitionSelecting = false
-    end
+    SV.RestartSelecting = false
     if not Success then
-        warn("[WZF][D1] RestartDungeon error; no further request:", tostring(Result))
-        if type(SaveErrorToFile) == "function" then
-            SaveErrorToFile("RESTART DUNGEON D1", Result)
-        end
+        warn("[WZF][D2] restart selection failed:", tostring(Result), "job:", game.JobId)
     end
+    return Success and Result
 end
 
 SetGlobal("collect chests")
@@ -1879,12 +1845,14 @@ local function CollectChests()
             end
 
             local ChestPrize
+            print("[WZF][D2-CHEST] request:", ChestIndex, "job:", game.JobId)
             if ChestIndex == 1 then
                 ChestPrize = MissionPrize:InvokeServer(true)
             else
                 ChestPrize = MissionPrize:InvokeServer()
             end
 
+            print("[WZF][D2-CHEST] returned:", ChestIndex, "type:", typeof(ChestPrize), "truthy:", not not ChestPrize, "job:", game.JobId)
             if ChestPrize then
                 if rItems then
                     ChestPrize = rItems[tostring(ChestPrize)].DisplayKey
@@ -2092,6 +2060,7 @@ local function ConnectMissionFinished()
                     ))
                 end
             until SellItemCheck == 0 and EquipInProgress == 0
+            print("[WZF][D2] completion reached restart; sell:", SellItemCheck, "equip:", EquipInProgress, "job:", game.JobId)
             RestartDungeon()
         end)
     end
@@ -2870,220 +2839,6 @@ local function BuildShopValues(TargetDropdown, TargetShop)
 end
 
 SetGlobal("mass item sell")
--- WZF: optional limited special-color protection. Default mode remains unchanged.
--- These are the exact inventory colors (not the number of saved color patterns).
-local SPECIAL_HEX_KEEP_LIMIT = 10
-local LimitedColorActionBusy = false
-
-local function IsSavedSpecialDye(Dye, HexPatterns)
-    if type(Dye) ~= "string" then
-        return false
-    end
-    local Normalized = string.lower(Dye)
-    for _, Pattern in HexPatterns do
-        -- Custom patterns were supported by the original script. Treat malformed
-        -- patterns as non-matches rather than letting them abort the entire scan.
-        if type(Pattern) == "string" and Pattern ~= "" then
-            local Ok, Matched = pcall(string.match, Normalized, "^" .. Pattern)
-            if Ok and Matched then
-                return true
-            end
-        end
-    end
-    return false
-end
-
--- This mode never selects locked/favorite items or cosmetics not selected by
--- the user for removal. Those items DO count toward the 10-per-color limit.
--- A fresh server inventory is checked before any destructive request.
-local function LimitedColorRecycle(Method, SelectedItems, HexesToSave)
-    if not SV.RealCosmeticTable then
-        Library:Notify("請先按「掃描外觀」，再選擇要處理的外觀。", 5)
-        return
-    end
-
-    local SelectedByUUID = {}
-    local SelectedCount = 0
-    for ItemName, GroupedData in SV.RealCosmeticTable do
-        if SelectedItems[ItemName] then
-            for _, ItemData in GroupedData do
-                if type(ItemData.UUID) == "string" and type(ItemData.Name) == "string" then
-                    if not SelectedByUUID[ItemData.UUID] then
-                        SelectedCount += 1
-                    end
-                    SelectedByUUID[ItemData.UUID] = ItemData
-                end
-            end
-        end
-    end
-    if SelectedCount == 0 then
-        Library:Notify("沒有可處理的已掃描外觀，請先掃描並勾選項目。", 5)
-        return
-    end
-
-    local Query = Remotes and Remotes:FindFirstChild("Profile_GetCosmetics")
-    if not Query then
-        Library:Notify("無法重新確認背包，為安全起見取消操作。", 5)
-        return
-    end
-    local Ok, FreshInventory = pcall(function()
-        return Query:InvokeServer()
-    end)
-    if not Ok or type(FreshInventory) ~= "table" then
-        Library:Notify("背包資料讀取失敗，未執行任何回收或出售。", 5)
-        return
-    end
-
-    local ColorBuckets = {}
-    local UnprotectedOtherColors = {}
-    local SeenUUID = {}
-    local SkippedChanged = 0
-
-    for _, LiveItem in FreshInventory do
-        if type(LiveItem) ~= "table" or type(LiveItem.uuid) ~= "string" then
-            Library:Notify("背包資料缺少 UUID，為避免誤回收已取消操作。", 5)
-            return
-        end
-        local UUID = LiveItem.uuid
-        if SeenUUID[UUID] then
-            continue
-        end
-        SeenUUID[UUID] = true
-
-        local Scanned = SelectedByUUID[UUID]
-        local Protected = not not (LiveItem.lock or LiveItem.fav
-            or LiveItem.equipped or LiveItem.equip or LiveItem.isEquipped)
-        local Dye, ColorOk = nil, true
-        if LiveItem.d ~= nil then
-            local Data = LiveItem.d
-            if type(Data) ~= "table" then
-                ColorOk = false
-            else
-                -- World Zero may supply RGB channels as numeric strings.
-                -- Do not guess unknown 0-255 formats or clamp invalid values:
-                -- an uncertain color must never be treated as recyclable.
-                local R = tonumber(Data.r)
-                local G = tonumber(Data.g)
-                local B = tonumber(Data.b)
-                local function ValidChannel(Value)
-                    return type(Value) == "number"
-                        and Value == Value
-                        and Value >= 0
-                        and Value <= 1
-                end
-
-                if ValidChannel(R) and ValidChannel(G) and ValidChannel(B) then
-                    local Parsed, Value = pcall(function()
-                        return string.lower(Color3.new(R, G, B):ToHex())
-                    end)
-                    if Parsed and type(Value) == "string" then
-                        Dye = Value
-                    else
-                        ColorOk = false
-                    end
-                else
-                    ColorOk = false
-                end
-            end
-        end
-        if not ColorOk then
-            -- WZF HEX diagnostics: report only data types and field names.
-            -- Never print item UUIDs, inventory contents, or dye values.
-            local InvalidDye = LiveItem.d
-            warn("[WZF][HEX] 背包染色資料格式異常；已停止操作")
-            warn("[WZF][HEX] d 型別:", typeof(InvalidDye))
-            if type(InvalidDye) == "table" then
-                warn("[WZF][HEX] r/g/b 型別:",
-                    typeof(InvalidDye.r), typeof(InvalidDye.g), typeof(InvalidDye.b))
-                local FieldNames = {}
-                for Key in pairs(InvalidDye) do
-                    if type(Key) == "string" then
-                        table.insert(FieldNames, Key)
-                    else
-                        table.insert(FieldNames, "(非文字欄位)")
-                    end
-                end
-                table.sort(FieldNames)
-                warn("[WZF][HEX] 染色欄位名稱:", table.concat(FieldNames, ", "))
-            end
-            Library:Notify("背包色碼資料格式異常，為避免誤回收已取消操作。", 5)
-            return
-        end
-
-        local SameAsScan = not Scanned or (Scanned.Dye and string.lower(Scanned.Dye) or nil) == Dye
-        if Scanned and not SameAsScan then
-            SkippedChanged += 1
-        end
-        local CanRecycle = Scanned ~= nil and SameAsScan and not Protected
-        if IsSavedSpecialDye(Dye, HexesToSave) then
-            local Bucket = ColorBuckets[Dye]
-            if not Bucket then
-                Bucket = { Reserved = 0, Candidates = {} }
-                ColorBuckets[Dye] = Bucket
-            end
-            if CanRecycle then
-                table.insert(Bucket.Candidates, { UUID = UUID, Name = Scanned.Name })
-            else
-                -- Locked, favorite, unselected and changed records stay untouched.
-                Bucket.Reserved += 1
-            end
-        elseif CanRecycle then
-            -- Same behavior as the original for ordinary/uncolored cosmetics.
-            table.insert(UnprotectedOtherColors, { UUID = UUID, Name = Scanned.Name })
-        end
-    end
-
-    local OtherCandidateCount = #UnprotectedOtherColors
-    local ItemsToRecycle = UnprotectedOtherColors
-    local SpecialSurplus = 0
-    local ColorGroupCount = 0
-    for Dye, Bucket in ColorBuckets do
-        ColorGroupCount += 1
-        -- Use stable ordering, independent of the order returned by the server.
-        table.sort(Bucket.Candidates, function(A, B)
-            return A.UUID < B.UUID
-        end)
-        local Remaining = math.max(0, SPECIAL_HEX_KEEP_LIMIT - Bucket.Reserved)
-        for Index, Item in Bucket.Candidates do
-            if Index > Remaining then
-                table.insert(ItemsToRecycle, Item)
-                SpecialSurplus += 1
-            end
-        end
-        print(string.format("[WZF][HEX] %s: untouched=%d, selected=%d, keep selected=%d, surplus=%d",
-            Dye, Bucket.Reserved, #Bucket.Candidates,
-            math.min(Remaining, #Bucket.Candidates),
-            math.max(0, #Bucket.Candidates - Remaining)))
-    end
-    table.sort(ItemsToRecycle, function(A, B)
-        return A.UUID < B.UUID
-    end)
-    print(string.format("[WZF][HEX] Total selected=%d; colors=%d; special surplus=%d; other candidates=%d; changed skipped=%d; total action=%d",
-        SelectedCount, ColorGroupCount, SpecialSurplus, OtherCandidateCount,
-        SkippedChanged, #ItemsToRecycle))
-
-    if Method == "Preview" then
-        Library:Notify(string.format("預覽：特殊色碼超額 %d 件，其他可處理 %d 件；實際未操作。",
-            SpecialSurplus, OtherCandidateCount), 7)
-        return
-    end
-
-    if SkippedChanged > 0 then
-        Library:Notify("有 " .. SkippedChanged .. " 件物品與上次掃描不符，已跳過；建議重新掃描。", 6)
-    end
-    if #ItemsToRecycle == 0 then
-        Library:Notify("沒有超出保留上限、可處理的已選取外觀。", 5)
-        return
-    end
-    if Method == "Recycle" then
-        Library:Notify("限量模式：嘗試回收 " .. #ItemsToRecycle .. " 件，請完成後重新掃描。", 6)
-        Remotes:WaitForChild("Recycler_Recycle", 10):FireServer(ItemsToRecycle)
-    elseif Method == "Gold" then
-        Library:Notify("限量模式：嘗試出售 " .. #ItemsToRecycle .. " 件，請完成後重新掃描。", 6)
-        Remotes:WaitForChild("Drops_SellItems", 10):InvokeServer(ItemsToRecycle)
-    end
-end
-
 local function RecycleFromInventory(Method, SelectedItems)
     local HexesToSave = {}
     local AddHexes = Options.SaveUserHexesInput.Value
@@ -3101,26 +2856,6 @@ local function RecycleFromInventory(Method, SelectedItems)
         for Index, Hex in SV.SpecialHexColors do
             table.insert(HexesToSave, Hex)
         end
-    end
-
-    -- Default OFF: preserve the author's original all-special-colors mode.
-    if Toggles.LimitSpecialHexKeepToggle and Toggles.LimitSpecialHexKeepToggle.Value then
-        if LimitedColorActionBusy then
-            Library:Notify("色碼清單正在處理，請勿重複操作。", 5)
-            return
-        end
-        LimitedColorActionBusy = true
-        local Ok, Error = xpcall(function()
-            LimitedColorRecycle(Method, SelectedItems, HexesToSave)
-        end, function(Message)
-            return tostring(Message)
-        end)
-        LimitedColorActionBusy = false
-        if not Ok then
-            warn("[WZF][HEX] 限量處理失敗：", Error)
-            Library:Notify("限量處理發生錯誤，請重新掃描；未保證伺服器已完成處理。", 6)
-        end
-        return
     end
 
     local ItemsToRecycle = {}
@@ -3474,7 +3209,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/098888888888888",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.1 2026/11/0999999999999",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4606,30 +4341,6 @@ FourthTab:AddButton({
         end
     end
 })
--- WZF: opt-in special color protection limit (false = unchanged original behavior).
-FifthTab:AddToggle("LimitSpecialHexKeepToggle", {
-    Text = "限量保留：每種特殊色碼最多 10 件",
-    Default = false,
-    Tooltip = "關閉：原版模式，符合特殊色碼的外觀全部保留。\n開啟：同一種實際色碼最多保留 10 件（全背包計數）。上鎖、收藏和未選取的物品只計數、不處理；如果它們已超過 10 件，不會強制刪除。\n此功能只影響「回收轉盤物品」與已掃描外觀的「回收／出售」，不影響一般裝備自動出售。請先使用預覽。",
-})
-FifthTab:AddButton({
-    Text = "預覽限量處理（不出售／回收）",
-    Tooltip = "先在「外觀」分頁按「掃描外觀」並勾選要處理的外觀。此按鈕只計算，不會回收或出售物品。詳細統計顯示於 Console。",
-    Func = function()
-        if not (Toggles.LimitSpecialHexKeepToggle and Toggles.LimitSpecialHexKeepToggle.Value) then
-            Library:Notify("請先開啟「限量保留」模式。", 5)
-            return
-        end
-        local SelectedItems = {}
-        if Options.CosmeticDropdown and type(Options.CosmeticDropdown.Value) == "table" then
-            for ItemName, Enabled in Options.CosmeticDropdown.Value do
-                if Enabled then SelectedItems[ItemName] = true end
-            end
-        end
-        RecycleFromInventory("Preview", SelectedItems)
-    end,
-})
-FifthTab:AddLabel("限量模式預設關閉。請先掃描外觀，使用預覽確認，再雙擊回收或出售。", true)
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
 local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
@@ -5575,6 +5286,12 @@ FirstTab:AddButton({
             DoubleClick = true,
             Func = function()
                 if IsDungeon then
+                    if SV.RestartSelecting then return end
+                    if SV.TransitionPending or SV.TransitionUnconfirmed then
+                        warn("[WZF][D2] user requested manual retry; previous request may still complete; job:", game.JobId)
+                        SV.TransitionPending = false
+                        SV.TransitionUnconfirmed = false
+                    end
                     ReplayDungeonLoop(ISV.MissionId, ISV.LoggedDifficulty)
                 end
             end
@@ -6203,7 +5920,9 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if not HoldForRealTime then
+                    if SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed then
+                        CombatTimer = 0
+                    elseif not HoldForRealTime then
                         task.wait(1)
                         local Healthproperties = PlayerCharacter:FindFirstChild("HealthProperties", true)
                         local OutOfCombat = Healthproperties and Healthproperties:FindFirstChild("OutOfCombat", true)
@@ -6214,7 +5933,7 @@ if IsDungeon then
                                 CombatTimer = 0
                             end
                         end
-                        if CombatTimer >= StuckDelay then
+                        if CombatTimer >= StuckDelay and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
                             KillSwitch = true
                             task.wait(2)
                             task.spawn(function()
