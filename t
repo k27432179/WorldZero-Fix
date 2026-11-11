@@ -3274,7 +3274,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.1 2026/11/09 d5b",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.3 2026/11/11 d5b",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
