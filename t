@@ -2904,62 +2904,215 @@ local function BuildShopValues(TargetDropdown, TargetShop)
 end
 
 SetGlobal("mass item sell")
-local function RecycleFromInventory(Method, SelectedItems)
-    local HexesToSave = {}
-    local AddHexes = Options.SaveUserHexesInput.Value
-    if AddHexes then
-        if AddHexes ~= "" and AddHexes ~= " " then
-            local StandardizeCommas = string.gsub(AddHexes, ", ", ",")
-            local RemoveHashTags = string.gsub(StandardizeCommas, "#", "")
-            local SplitHexes = string.split(RemoveHashTags, ",")
-            for Index, Hex in SplitHexes do
-                if Hex ~= "" and Hex ~= " " then
-                    table.insert(HexesToSave, string.lower(Hex))
-                end
-            end
+-- Per-exact-color retention. No sale/recycle is triggered by changing the toggle.
+local HexRetention = {}
+
+function HexRetention.Decode(Data)
+    if Data == nil then return nil, true end
+    if type(Data) ~= "table" then return nil, false end
+    local RGB = {}
+    for Index, Channel in ipairs({"r", "g", "b"}) do
+        local Value = rawget(Data, Channel)
+        if type(Value) == "string" then
+            if #Value > 128 then return nil, false end
+            local Text = Value:match("^%s*(.-)%s*$")
+            if Text == "" or Text:find("[^%d%.eE%+%-]") then return nil, false end
+            Value = tonumber(Text)
         end
-        for Index, Hex in SV.SpecialHexColors do
-            table.insert(HexesToSave, Hex)
+        if type(Value) ~= "number" or Value ~= Value or Value < 0 or Value > 1 then
+            return nil, false
+        end
+        RGB[Index] = Value
+    end
+    return Color3.new(RGB[1], RGB[2], RGB[3]):ToHex():lower(), true
+end
+
+function HexRetention.Patterns()
+    local Patterns = {}
+    for _, Hex in ipairs(SV.SpecialHexColors) do table.insert(Patterns, Hex:lower()) end
+    local Input = Options.SaveUserHexesInput and Options.SaveUserHexesInput.Value or ""
+    for Pattern in tostring(Input):lower():gsub("#", ""):gmatch("[^,]+") do
+        Pattern = Pattern:match("^%s*(.-)%s*$")
+        if Pattern ~= "" then
+            if not pcall(string.match, "000000", "^" .. Pattern) then return nil end
+            table.insert(Patterns, Pattern)
         end
     end
+    return Patterns
+end
 
-    local ItemsToRecycle = {}
-    for ItemName, GroupedData in SV.RealCosmeticTable do
-        if SelectedItems[ItemName] then
-            for Index, ItemData in GroupedData do
-                local CheckDye = ItemData.Dye
-                if CheckDye then
-                    local GoodDye
-                    for Index, Dye in HexesToSave do
-                        if string.match(CheckDye, "^"..Dye) then
-                            GoodDye = true
-                            break
-                        end
-                    end
-                    if not GoodDye then
-                        table.insert(ItemsToRecycle, {
-                            UUID = ItemData.UUID,
-                            Name = ItemData.Name
-                        })
-                        GroupedData[Index] = nil
-                    end
-                else
-                    table.insert(ItemsToRecycle, {
-                        UUID = ItemData.UUID,
-                        Name = ItemData.Name
-                    })
-                    GroupedData[Index] = nil
-                end
+-- Count only selected items. Unselected items never consume their retention quota.
+function HexRetention.Plan(Records, Limited)
+    table.sort(Records, function(A, B)
+        local RankA = A.Protected and 1 or (not A.Selected and 2 or 3)
+        local RankB = B.Protected and 1 or (not B.Selected and 2 or 3)
+        if RankA ~= RankB then return RankA < RankB end
+        return A.UUID < B.UUID
+    end)
+    local Counts, Plan = {}, {}
+    local SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = 0, 0, 0, 0
+    for _, Record in ipairs(Records) do
+        local Keep = Record.Protected or not Record.Selected
+        if Record.Special and Record.Selected then
+            Counts[Record.Hex] = (Counts[Record.Hex] or 0) + 1
+            Keep = Keep or not Limited or Counts[Record.Hex] <= 10
+            if Keep then KeptSpecial = KeptSpecial + 1 end
+        end
+        if Record.Selected and Record.Protected then ProtectedSelected = ProtectedSelected + 1 end
+        if Record.Selected and not Keep then
+            table.insert(Plan, {UUID = Record.UUID, Name = Record.Name})
+            if Record.Special then SpecialExcess = SpecialExcess + 1 else Ordinary = Ordinary + 1 end
+        end
+    end
+    -- Enforce retention independently of the running quota before exposing a plan.
+    local Planned, SelectedByHex, RemainingByHex = {}, {}, {}
+    for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
+    for _, Record in ipairs(Records) do
+        if Record.Selected and Record.Special then
+            SelectedByHex[Record.Hex] = (SelectedByHex[Record.Hex] or 0) + 1
+            if not Planned[Record.UUID] then
+                RemainingByHex[Record.Hex] = (RemainingByHex[Record.Hex] or 0) + 1
             end
         end
     end
+    for Hex, Total in pairs(SelectedByHex) do
+        local Minimum = Limited and math.min(10, Total) or Total
+        if (RemainingByHex[Hex] or 0) < Minimum then
+            error("retention invariant failed")
+        end
+    end
+    return Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected
+end
 
+function HexRetention.Run(Method, SelectedItems, PreviewOnly)
+    if Method ~= "Recycle" and Method ~= "Gold" then return end
+    if type(SelectedItems) ~= "table" or type(SV.RealCosmeticTable) ~= "table" then
+        Library:Notify("請先掃描外觀，再選取要處理的外觀。", 5)
+        return
+    end
+    if not SV.CanRequire then
+        Library:Notify("此環境不支援讀取物品資料，已停止操作。", 5)
+        return
+    end
+    local Patterns = HexRetention.Patterns()
+    if not Patterns then Library:Notify("輸入的色碼規則無效，已停止操作。", 5); return end
+    local Allowed, SelectedCount = {}, 0
+    for VisualName, Group in pairs(SV.RealCosmeticTable) do
+        if SelectedItems[VisualName] then
+            for _, Item in pairs(Group) do
+                if type(Item.UUID) ~= "string" or type(Item.Name) ~= "string" then
+                    Library:Notify("掃描資料異常，請重新掃描。", 5)
+                    return
+                end
+                Allowed[Item.UUID] = Item.Name
+                SelectedCount = SelectedCount + 1
+            end
+        end
+    end
+    if SelectedCount == 0 then Library:Notify("請先掃描並選取至少一種外觀。", 5); return end
+    local Definitions = require(Items)
+    if type(Definitions) ~= "table" then Library:Notify("物品資料異常，已停止操作。", 5); return end
+    local ById = {}
+    for Name, Definition in pairs(Definitions) do
+        if type(Definition) == "table" and Definition.ID ~= nil
+            and Definition.Type ~= "Emote" and Definition.Type ~= "Title"
+            and Definition.Type ~= "Furniture" and Definition.Type ~= "Consumable" then
+            if ById[Definition.ID] then Library:Notify("物品資料重複，已停止操作。", 5); return end
+            ById[Definition.ID] = tostring(Name)
+        end
+    end
+    -- Always plan from a fresh read; the scan is only the explicit allowed selection.
+    local LiveInventory = Remotes.Profile_GetCosmetics:InvokeServer()
+    if type(LiveInventory) ~= "table" then Library:Notify("無法讀取最新背包，已停止操作。", 5); return end
+    local Records, Seen = {}, {}
+    for _, Item in pairs(LiveInventory) do
+        if type(Item) ~= "table" then Library:Notify("背包物品資料異常，已停止操作。", 5); return end
+        local Hex, ColorOk = HexRetention.Decode(rawget(Item, "d"))
+        if not ColorOk then
+            Library:Notify("背包色碼資料無法確認，已停止操作，沒有出售或回收。", 7)
+            return
+        end
+        local Name = ById[Item.id]
+        if Name then
+            if type(Item.uuid) ~= "string" or Item.uuid == "" or Seen[Item.uuid] then
+                Library:Notify("背包物品資料異常，已停止操作。", 5)
+                return
+            end
+            Seen[Item.uuid] = true
+            local Special = false
+            if Hex then
+                for _, Pattern in ipairs(Patterns) do
+                    if Hex:match("^" .. Pattern) then Special = true; break end
+                end
+            end
+            -- Preserve the base's lock/favourite protection. Also honour explicit equip flags.
+            local Protected = not not (Item.lock or Item.fav or Item.equipped or Item.equip)
+            table.insert(Records, {UUID = Item.uuid, Name = Name, Hex = Hex,
+                Special = Special, Protected = Protected, Selected = Allowed[Item.uuid] == Name})
+        end
+    end
+    local Limited = Toggles.KeepTenPerSpecialHex and Toggles.KeepTenPerSpecialHex.Value == true
+    local Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = HexRetention.Plan(Records, Limited)
+    local Mode = Limited and "每色保留10件" or "特殊色全部保留"
+    if PreviewOnly then
+        local Planned, Stats = {}, {}
+        for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
+        for _, Record in ipairs(Records) do
+            local Color = Record.Hex or "<無染色>"
+            local Row = Stats[Color]
+            if not Row then
+                Row = {Selected = 0, Keep = 0, Remove = 0, Special = Record.Special, Other = 0}
+                Stats[Color] = Row
+            end
+            if Record.Selected then
+                Row.Selected = Row.Selected + 1
+                if Planned[Record.UUID] then Row.Remove = Row.Remove + 1 else Row.Keep = Row.Keep + 1 end
+            else
+                Row.Other = Row.Other + 1
+            end
+        end
+        warn("[WZF][KEEP10] 預覽版本 selected-v3；模式:", Mode)
+        local Colors = {}
+        for Color, Row in pairs(Stats) do
+            if Row.Selected > 0 then table.insert(Colors, Color) end
+        end
+        table.sort(Colors)
+        for Index, Color in ipairs(Colors) do
+            if Index > 50 then warn("[WZF][KEEP10] 其餘色碼省略；本次未實際處理。"); break end
+            local Row = Stats[Color]
+            warn("[WZF][KEEP10] 色碼:", Color, "辨識為特殊色:", Row.Special,
+                "選取件數:", Row.Selected, "選取中預計保留:", Row.Keep,
+                "選取中預計處理:", Row.Remove, "其他同色件數:", Row.Other)
+        end
+        Library:Notify("預覽（" .. Mode .. "）：特殊色超額 " .. SpecialExcess
+            .. " 件；一般色／無色 " .. Ordinary .. " 件；合計待處理 " .. #Plan
+            .. " 件。選取中受保護 " .. ProtectedSelected .. " 件。沒有出售或回收。", 12)
+        return
+    end
+    if #Plan == 0 then
+        Library:Notify("沒有需要處理的物品（" .. Mode .. "）。", 5)
+        return
+    end
+    -- No yielding wait between the completed plan validation and the send.
+    local Remote = Remotes:FindFirstChild(Method == "Recycle" and "Recycler_Recycle" or "Drops_SellItems")
+    if not Remote then Library:Notify("找不到處理功能，已停止操作。", 5); return end
     if Method == "Recycle" then
-        Library:Notify("Attempting to recycle " ..tostring(#ItemsToRecycle).. " items", 5)
-        Remotes:WaitForChild("Recycler_Recycle", math.huge):FireServer(ItemsToRecycle)
-    elseif Method == "Gold" then
-        Library:Notify("Attempting to sell " ..tostring(#ItemsToRecycle).. " items", 5)
-        Remotes:WaitForChild("Drops_SellItems", math.huge):InvokeServer(ItemsToRecycle)
+        Remote:FireServer(Plan)
+    else
+        Remote:InvokeServer(Plan)
+    end
+    Library:Notify("已送出" .. (Method == "Recycle" and "回收" or "出售") .. "請求，共 " .. #Plan
+        .. " 件。請重新掃描確認實際結果。", 8)
+end
+
+local function RecycleFromInventory(Method, SelectedItems, PreviewOnly)
+    if HexRetention.Busy then Library:Notify("正在讀取或處理背包，請稍候。", 5); return end
+    HexRetention.Busy = true
+    local Ok = pcall(HexRetention.Run, Method, SelectedItems, PreviewOnly == true)
+    HexRetention.Busy = false
+    if not Ok then
+        -- Do not retry destructive requests: an interrupted response can already be applied.
+        Library:Notify("處理中斷，請先檢查背包並重新掃描；不要連續重試。", 7)
     end
 end
 
@@ -3274,7 +3427,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.3 2026/11/11 d5b",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.3 2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -3598,6 +3751,16 @@ ThirdTab:AddButton({
         end
 
         for Index, ItemData in Profile_GetCosmetics do
+            local ScanHex, ScanColorOk
+            if type(ItemData) == "table" then
+                ScanHex, ScanColorOk = HexRetention.Decode(ItemData.d)
+            end
+            if not ScanColorOk then
+                SV.RealCosmeticTable = nil
+                RecyclingItems = nil
+                Library:Notify("色碼資料無法確認，已停止掃描，沒有出售或回收。", 7)
+                return
+            end
             if ItemData.lock or ItemData.fav then
                 continue
             end
@@ -3619,7 +3782,7 @@ ThirdTab:AddButton({
                 table.insert(RealItemTable[VisualName], {
                     UUID = ItemData.uuid,
                     Name = ItemRef.InternalName,
-                    Dye = Color3.new(ItemData.d.r, ItemData.d.g, ItemData.d.b):ToHex()
+                    Dye = ScanHex
                 })
             end
         end
@@ -4347,6 +4510,15 @@ FourthTab:AddButton({
             end
 
             for Index, ItemData in Profile_GetCosmetics do
+                local ScanHex, ScanColorOk
+                if type(ItemData) == "table" then
+                    ScanHex, ScanColorOk = HexRetention.Decode(ItemData.d)
+                end
+                if not ScanColorOk then
+                    SV.RealCosmeticTable = nil
+                    Library:Notify("色碼資料無法確認，已停止掃描，沒有出售或回收。", 7)
+                    return
+                end
                 if ItemData.lock or ItemData.fav then
                     continue
                 end
@@ -4369,7 +4541,7 @@ FourthTab:AddButton({
                     table.insert(RealItemTable[VisualName], {
                         UUID = ItemData.uuid,
                         Name = ItemRef.InternalName,
-                        Dye = Color3.new(ItemData.d.r, ItemData.d.g, ItemData.d.b):ToHex()
+                        Dye = ScanHex
                     })
                 end
             end
@@ -4408,6 +4580,27 @@ FourthTab:AddButton({
 })
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
+FifthTab:AddToggle("KeepTenPerSpecialHex", {
+    Text = "選取物品中：每個特殊色碼保留 10 件",
+    Default = false,
+    Tooltip = "關閉：特殊色全部保留。開啟：只在你選取的物品中，每色各留10件；未選取物品不占名額。開關本身不會處理物品。"
+})
+FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。\n\n例如：同色25件，留10件、處理15件。\n同色只有8件，就8件全部保留。\n每種完整色碼分開算，不是全部合計10件。\n不同外觀若同色，在選取範圍內一起算。\n\n先到「外觀」掃描並選取物品。\n再按下方「預覽」確認處理數量。\n確認後，才回「外觀」按回收或出售。\n只切換開關，不會自動處理物品。\n\n內建特殊色與輸入的保留色碼都適用。\n一般色／無色仍會依原規則列入處理。\n\n1. 切記：建議一次只選一種服裝／皮膚回收。\n2. 同時選多種服裝／皮膚時，\n相同特殊色碼合計只保留10件，\n不是每種服裝／皮膚各保留10件。\n3. 回收完務必回到「外觀」按「清除選取」。", true)
+FifthTab:AddButton({
+    Text = "預覽處理數量（不回收）",
+    Func = function()
+        if not (IsDungeon or IsWorld) then return end
+        local SelectedItems = {}
+        local Selection = Options.CosmeticDropdown.Value
+        if type(Selection) == "table" then
+            for Key, Value in pairs(Selection) do
+                if Value then SelectedItems[Key] = true end
+            end
+        end
+        RecycleFromInventory("Recycle", SelectedItems, true)
+    end
+})
+FifthTab:AddDivider()
 local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
 local UserEnteredHexes = FifthTab:AddLabel("已保留的色碼：\n無\n＋（所有特殊色碼）", true)
     FifthTab:AddDivider()
