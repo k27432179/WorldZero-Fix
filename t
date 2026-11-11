@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D3-retry-3s startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D5b-stuck-character-retry-3s startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -865,6 +865,11 @@ local function CheckForCharacter(TimeStarted)
     return TimeStarted
 end
 
+local function CombatCharacterReady()
+    return PlayerCharacter ~= nil and LocalPlayer.Character == PlayerCharacter
+        and PlayerRoot ~= nil and PlayerRoot.Parent == PlayerCharacter
+        and PlayerCollider ~= nil and PlayerCollider.Parent == PlayerCharacter
+end
 SetGlobal("format number")
 local function FormatNumber(n)
     n = tostring(n)
@@ -1196,6 +1201,11 @@ local function MobScanner()
                 SV.WZFScannerState = "running"
                 while not KillSwitch do
                     SV.WZFScannerTick = os.clock()
+                    if not CombatCharacterReady() then
+                        CurrentMob, TeleportMob = nil, nil
+                        task.wait(.1)
+                        continue
+                    end
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1264,7 +1274,10 @@ local function MobScanner()
                             end
                         end
                         if not MobData.Invincible then
-                            local MobDistance = (MobData.Collider.Position - PlayerRoot.Position).Magnitude
+                            local Root = PlayerRoot
+                            local Collider = MobData.Collider or Mob:FindFirstChild("Collider")
+                            if not CombatCharacterReady() or not Collider or not Collider.Parent then continue end
+                            local MobDistance = (Collider.Position - Root.Position).Magnitude
                             if not MobData.BossTag then
                                 if MobDistance < ClosestMobDistance then
                                     ClosestMob = Mob
@@ -1408,6 +1421,11 @@ local function MobScanner()
                 SV.WZFScannerState = "running"
                 while not KillSwitch do
                     SV.WZFScannerTick = os.clock()
+                    if not CombatCharacterReady() then
+                        CurrentMob, TeleportMob = nil, nil
+                        task.wait(.1)
+                        continue
+                    end
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1458,6 +1476,7 @@ local function MobScanner()
                         if MobPriority then
                             continue
                         end
+                        if not CombatCharacterReady() then continue end
                         local MobDistance = (PlayerCollider.Position - MobCollider.Position).Magnitude
                         if AvoidMobs[Mob.Name] then
                             if MobDistance < ClosestAvoidDistance then
@@ -1881,6 +1900,13 @@ local function CollectChests()
                 break
             end
 
+            if ScriptUnloaded or KillSwitch then break end
+            if ChestIndex > 1 then
+                local ChestDelay = tonumber(SV.CollectChestsDelay) or 0.1
+                if ChestDelay ~= ChestDelay then ChestDelay = 0.1 end
+                task.wait(math.clamp(ChestDelay, 0.01, 5))
+            end
+            if ScriptUnloaded or KillSwitch then break end
             local ChestPrize
             print("[WZF][D2-CHEST] request:", ChestIndex, "job:", game.JobId)
             if ChestIndex == 1 then
@@ -2225,14 +2251,13 @@ local function EquipNewItemAdded()
         local PlayerEquips = ReplicatedStorage.PlayerEquips[LocalPlayer.Name]
         local EquipItem = Remotes:WaitForChild("Inventory_EquipItem", math.huge)
         ConnectionTable["ConnectEquipNewItems"] = ScanInventory.ChildAdded:Connect(function(NewItem)
+            EquipInProgress = EquipInProgress + 1
             local Success1, Result1 = pcall(function()
-                EquipInProgress = EquipInProgress + 1
                 task.wait(1)
                 if ISV.Debug then
                     print("Checking equip: ", NewItem)
                 end
                 if not NewItem:FindFirstChild("Level") then
-                    EquipInProgress = EquipInProgress - 1
                     return
                 end
                 for Index, Slot in EquipSlots do
@@ -2260,9 +2285,11 @@ local function EquipNewItemAdded()
                     end
                 end
                 task.wait(1)
-                EquipInProgress = EquipInProgress - 1
             end)
+            -- Release once on normal completion, early return, or protected error.
+            EquipInProgress = math.max(0, EquipInProgress - 1)
             if not Success1 then
+                warn("[WZF][D4] equip error; counter released:", tostring(Result1), "job:", game.JobId)
                 SaveErrorToFile("SCAN ITEM TO EQUIP", tostring(Result1), NewItem)
             end
         end)
@@ -2575,6 +2602,7 @@ end
 
 SetGlobal("teleport stand part")
 local function TeleportStandPart()
+    if not CombatCharacterReady() or not StandPartHeight then return end
     if PlayerStandPart then
         PlayerStandPart.CFrame = CFrame.new(PlayerCollider.Position.X, (PlayerCollider.Position.Y-StandPartHeight), PlayerCollider.Position.Z)
     end
@@ -2582,35 +2610,35 @@ end
 
 SetGlobal("dodge current attack")
 local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, AdjustZ)
+    if EventOverride or not CombatCharacterReady() then return end
+    SV.WZFDodgeGeneration = (SV.WZFDodgeGeneration or 0) + 1
+    local Generation = SV.WZFDodgeGeneration
+    local Root = PlayerRoot
+    local Character = PlayerCharacter
+    local PreviousStop, PreviousTarget = TempStop, CanTarget
     local Success, Result = pcall(function()
-        if EventOverride then
-            return
-        end
-        local ZOffset = AdjustZ or 0
-        local AttackName = AttackName or "[no name for attack given]"
         SV.DodgingAttack = true
         task.wait(DelayBeforeDodge)
-
-        if SV.SafeKillaura then
-            CanTarget = false
-        end
-
+        if ScriptUnloaded or KillSwitch or EventOverride or not CombatCharacterReady()
+            or PlayerRoot ~= Root or PlayerCharacter ~= Character or SV.WZFDodgeGeneration ~= Generation then return end
+        if SV.SafeKillaura then CanTarget = false end
         local DodgeStart = time() + DodgeLength
-        local DodgePosition = Vector3.new(PlayerRoot.Position.X, PlayerRoot.Position.Y+200, PlayerRoot.Position.Z+ZOffset)
-        Library:Notify("Dodging attack: "..AttackName, DodgeLength)
+        local DodgePosition = Root.Position + Vector3.new(0, 200, AdjustZ or 0)
+        Library:Notify("Dodging attack: " .. (AttackName or "[no name for attack given]"), DodgeLength)
         while time() < DodgeStart and not EventOverride do
+            if ScriptUnloaded or KillSwitch or not CombatCharacterReady() or PlayerRoot ~= Root
+                or SV.WZFDodgeGeneration ~= Generation then break end
             TempStop = true
-            PlayerRoot.CFrame = CFrame.new(DodgePosition)
+            Root.CFrame = CFrame.new(DodgePosition)
             TeleportStandPart()
             task.wait()
         end
-        TempStop = false
-        CanTarget = true
-        SV.DodgingAttack = nil
     end)
-    if not Success then
-        SaveErrorToFile("DODGING ATTACK", Result)
+    if SV and SV.WZFDodgeGeneration == Generation then
+        TempStop, CanTarget = PreviousStop, PreviousTarget
+        SV.DodgingAttack = nil
     end
+    if not Success and not ScriptUnloaded then SaveErrorToFile("DODGING ATTACK", Result) end
 end
 
 SetGlobal("teleport to orb")
@@ -2876,215 +2904,62 @@ local function BuildShopValues(TargetDropdown, TargetShop)
 end
 
 SetGlobal("mass item sell")
--- Per-exact-color retention. No sale/recycle is triggered by changing the toggle.
-local HexRetention = {}
-
-function HexRetention.Decode(Data)
-    if Data == nil then return nil, true end
-    if type(Data) ~= "table" then return nil, false end
-    local RGB = {}
-    for Index, Channel in ipairs({"r", "g", "b"}) do
-        local Value = rawget(Data, Channel)
-        if type(Value) == "string" then
-            if #Value > 128 then return nil, false end
-            local Text = Value:match("^%s*(.-)%s*$")
-            if Text == "" or Text:find("[^%d%.eE%+%-]") then return nil, false end
-            Value = tonumber(Text)
-        end
-        if type(Value) ~= "number" or Value ~= Value or Value < 0 or Value > 1 then
-            return nil, false
-        end
-        RGB[Index] = Value
-    end
-    return Color3.new(RGB[1], RGB[2], RGB[3]):ToHex():lower(), true
-end
-
-function HexRetention.Patterns()
-    local Patterns = {}
-    for _, Hex in ipairs(SV.SpecialHexColors) do table.insert(Patterns, Hex:lower()) end
-    local Input = Options.SaveUserHexesInput and Options.SaveUserHexesInput.Value or ""
-    for Pattern in tostring(Input):lower():gsub("#", ""):gmatch("[^,]+") do
-        Pattern = Pattern:match("^%s*(.-)%s*$")
-        if Pattern ~= "" then
-            if not pcall(string.match, "000000", "^" .. Pattern) then return nil end
-            table.insert(Patterns, Pattern)
-        end
-    end
-    return Patterns
-end
-
--- Count only selected items. Unselected items never consume their retention quota.
-function HexRetention.Plan(Records, Limited)
-    table.sort(Records, function(A, B)
-        local RankA = A.Protected and 1 or (not A.Selected and 2 or 3)
-        local RankB = B.Protected and 1 or (not B.Selected and 2 or 3)
-        if RankA ~= RankB then return RankA < RankB end
-        return A.UUID < B.UUID
-    end)
-    local Counts, Plan = {}, {}
-    local SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = 0, 0, 0, 0
-    for _, Record in ipairs(Records) do
-        local Keep = Record.Protected or not Record.Selected
-        if Record.Special and Record.Selected then
-            Counts[Record.Hex] = (Counts[Record.Hex] or 0) + 1
-            Keep = Keep or not Limited or Counts[Record.Hex] <= 10
-            if Keep then KeptSpecial = KeptSpecial + 1 end
-        end
-        if Record.Selected and Record.Protected then ProtectedSelected = ProtectedSelected + 1 end
-        if Record.Selected and not Keep then
-            table.insert(Plan, {UUID = Record.UUID, Name = Record.Name})
-            if Record.Special then SpecialExcess = SpecialExcess + 1 else Ordinary = Ordinary + 1 end
-        end
-    end
-    -- Enforce retention independently of the running quota before exposing a plan.
-    local Planned, SelectedByHex, RemainingByHex = {}, {}, {}
-    for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
-    for _, Record in ipairs(Records) do
-        if Record.Selected and Record.Special then
-            SelectedByHex[Record.Hex] = (SelectedByHex[Record.Hex] or 0) + 1
-            if not Planned[Record.UUID] then
-                RemainingByHex[Record.Hex] = (RemainingByHex[Record.Hex] or 0) + 1
-            end
-        end
-    end
-    for Hex, Total in pairs(SelectedByHex) do
-        local Minimum = Limited and math.min(10, Total) or Total
-        if (RemainingByHex[Hex] or 0) < Minimum then
-            error("retention invariant failed")
-        end
-    end
-    return Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected
-end
-
-function HexRetention.Run(Method, SelectedItems, PreviewOnly)
-    if Method ~= "Recycle" and Method ~= "Gold" then return end
-    if type(SelectedItems) ~= "table" or type(SV.RealCosmeticTable) ~= "table" then
-        Library:Notify("請先掃描外觀，再選取要處理的外觀。", 5)
-        return
-    end
-    if not SV.CanRequire then
-        Library:Notify("此環境不支援讀取物品資料，已停止操作。", 5)
-        return
-    end
-    local Patterns = HexRetention.Patterns()
-    if not Patterns then Library:Notify("輸入的色碼規則無效，已停止操作。", 5); return end
-    local Allowed, SelectedCount = {}, 0
-    for VisualName, Group in pairs(SV.RealCosmeticTable) do
-        if SelectedItems[VisualName] then
-            for _, Item in pairs(Group) do
-                if type(Item.UUID) ~= "string" or type(Item.Name) ~= "string" then
-                    Library:Notify("掃描資料異常，請重新掃描。", 5)
-                    return
-                end
-                Allowed[Item.UUID] = Item.Name
-                SelectedCount = SelectedCount + 1
-            end
-        end
-    end
-    if SelectedCount == 0 then Library:Notify("請先掃描並選取至少一種外觀。", 5); return end
-    local Definitions = require(Items)
-    if type(Definitions) ~= "table" then Library:Notify("物品資料異常，已停止操作。", 5); return end
-    local ById = {}
-    for Name, Definition in pairs(Definitions) do
-        if type(Definition) == "table" and Definition.ID ~= nil
-            and Definition.Type ~= "Emote" and Definition.Type ~= "Title"
-            and Definition.Type ~= "Furniture" and Definition.Type ~= "Consumable" then
-            if ById[Definition.ID] then Library:Notify("物品資料重複，已停止操作。", 5); return end
-            ById[Definition.ID] = tostring(Name)
-        end
-    end
-    -- Always plan from a fresh read; the scan is only the explicit allowed selection.
-    local LiveInventory = Remotes.Profile_GetCosmetics:InvokeServer()
-    if type(LiveInventory) ~= "table" then Library:Notify("無法讀取最新背包，已停止操作。", 5); return end
-    local Records, Seen = {}, {}
-    for _, Item in pairs(LiveInventory) do
-        if type(Item) ~= "table" then Library:Notify("背包物品資料異常，已停止操作。", 5); return end
-        local Hex, ColorOk = HexRetention.Decode(rawget(Item, "d"))
-        if not ColorOk then
-            Library:Notify("背包色碼資料無法確認，已停止操作，沒有出售或回收。", 7)
-            return
-        end
-        local Name = ById[Item.id]
-        if Name then
-            if type(Item.uuid) ~= "string" or Item.uuid == "" or Seen[Item.uuid] then
-                Library:Notify("背包物品資料異常，已停止操作。", 5)
-                return
-            end
-            Seen[Item.uuid] = true
-            local Special = false
-            if Hex then
-                for _, Pattern in ipairs(Patterns) do
-                    if Hex:match("^" .. Pattern) then Special = true; break end
+local function RecycleFromInventory(Method, SelectedItems)
+    local HexesToSave = {}
+    local AddHexes = Options.SaveUserHexesInput.Value
+    if AddHexes then
+        if AddHexes ~= "" and AddHexes ~= " " then
+            local StandardizeCommas = string.gsub(AddHexes, ", ", ",")
+            local RemoveHashTags = string.gsub(StandardizeCommas, "#", "")
+            local SplitHexes = string.split(RemoveHashTags, ",")
+            for Index, Hex in SplitHexes do
+                if Hex ~= "" and Hex ~= " " then
+                    table.insert(HexesToSave, string.lower(Hex))
                 end
             end
-            -- Preserve the base's lock/favourite protection. Also honour explicit equip flags.
-            local Protected = not not (Item.lock or Item.fav or Item.equipped or Item.equip)
-            table.insert(Records, {UUID = Item.uuid, Name = Name, Hex = Hex,
-                Special = Special, Protected = Protected, Selected = Allowed[Item.uuid] == Name})
+        end
+        for Index, Hex in SV.SpecialHexColors do
+            table.insert(HexesToSave, Hex)
         end
     end
-    local Limited = Toggles.KeepTenPerSpecialHex and Toggles.KeepTenPerSpecialHex.Value == true
-    local Plan, SpecialExcess, Ordinary, KeptSpecial, ProtectedSelected = HexRetention.Plan(Records, Limited)
-    local Mode = Limited and "每色保留10件" or "特殊色全部保留"
-    if PreviewOnly then
-        local Planned, Stats = {}, {}
-        for _, Item in ipairs(Plan) do Planned[Item.UUID] = true end
-        for _, Record in ipairs(Records) do
-            local Color = Record.Hex or "<無染色>"
-            local Row = Stats[Color]
-            if not Row then
-                Row = {Selected = 0, Keep = 0, Remove = 0, Special = Record.Special, Other = 0}
-                Stats[Color] = Row
+
+    local ItemsToRecycle = {}
+    for ItemName, GroupedData in SV.RealCosmeticTable do
+        if SelectedItems[ItemName] then
+            for Index, ItemData in GroupedData do
+                local CheckDye = ItemData.Dye
+                if CheckDye then
+                    local GoodDye
+                    for Index, Dye in HexesToSave do
+                        if string.match(CheckDye, "^"..Dye) then
+                            GoodDye = true
+                            break
+                        end
+                    end
+                    if not GoodDye then
+                        table.insert(ItemsToRecycle, {
+                            UUID = ItemData.UUID,
+                            Name = ItemData.Name
+                        })
+                        GroupedData[Index] = nil
+                    end
+                else
+                    table.insert(ItemsToRecycle, {
+                        UUID = ItemData.UUID,
+                        Name = ItemData.Name
+                    })
+                    GroupedData[Index] = nil
+                end
             end
-            if Record.Selected then
-                Row.Selected = Row.Selected + 1
-                if Planned[Record.UUID] then Row.Remove = Row.Remove + 1 else Row.Keep = Row.Keep + 1 end
-            else
-                Row.Other = Row.Other + 1
-            end
         end
-        warn("[WZF][KEEP10] 預覽版本 selected-v3；模式:", Mode)
-        local Colors = {}
-        for Color, Row in pairs(Stats) do
-            if Row.Selected > 0 then table.insert(Colors, Color) end
-        end
-        table.sort(Colors)
-        for Index, Color in ipairs(Colors) do
-            if Index > 50 then warn("[WZF][KEEP10] 其餘色碼省略；本次未實際處理。"); break end
-            local Row = Stats[Color]
-            warn("[WZF][KEEP10] 色碼:", Color, "辨識為特殊色:", Row.Special,
-                "選取件數:", Row.Selected, "選取中預計保留:", Row.Keep,
-                "選取中預計處理:", Row.Remove, "其他同色件數:", Row.Other)
-        end
-        Library:Notify("預覽（" .. Mode .. "）：特殊色超額 " .. SpecialExcess
-            .. " 件；一般色／無色 " .. Ordinary .. " 件；合計待處理 " .. #Plan
-            .. " 件。選取中受保護 " .. ProtectedSelected .. " 件。沒有出售或回收。", 12)
-        return
     end
-    if #Plan == 0 then
-        Library:Notify("沒有需要處理的物品（" .. Mode .. "）。", 5)
-        return
-    end
-    -- No yielding wait between the completed plan validation and the send.
-    local Remote = Remotes:FindFirstChild(Method == "Recycle" and "Recycler_Recycle" or "Drops_SellItems")
-    if not Remote then Library:Notify("找不到處理功能，已停止操作。", 5); return end
+
     if Method == "Recycle" then
-        Remote:FireServer(Plan)
-    else
-        Remote:InvokeServer(Plan)
-    end
-    Library:Notify("已送出" .. (Method == "Recycle" and "回收" or "出售") .. "請求，共 " .. #Plan
-        .. " 件。請重新掃描確認實際結果。", 8)
-end
-
-local function RecycleFromInventory(Method, SelectedItems, PreviewOnly)
-    if HexRetention.Busy then Library:Notify("正在讀取或處理背包，請稍候。", 5); return end
-    HexRetention.Busy = true
-    local Ok = pcall(HexRetention.Run, Method, SelectedItems, PreviewOnly == true)
-    HexRetention.Busy = false
-    if not Ok then
-        -- Do not retry destructive requests: an interrupted response can already be applied.
-        Library:Notify("處理中斷，請先檢查背包並重新掃描；不要連續重試。", 7)
+        Library:Notify("Attempting to recycle " ..tostring(#ItemsToRecycle).. " items", 5)
+        Remotes:WaitForChild("Recycler_Recycle", math.huge):FireServer(ItemsToRecycle)
+    elseif Method == "Gold" then
+        Library:Notify("Attempting to sell " ..tostring(#ItemsToRecycle).. " items", 5)
+        Remotes:WaitForChild("Drops_SellItems", math.huge):InvokeServer(ItemsToRecycle)
     end
 end
 
@@ -3399,7 +3274,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.1 2026/11/09 d5b",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -3699,7 +3574,6 @@ ThirdTab:AddButton({
         end
         RecyclingItems = true
         if not SV.CanRequire then
-            RecyclingItems = nil
             Library:Notify("執行環境不支援此功能（缺少 require()）", 5)
             return
         end
@@ -3724,16 +3598,6 @@ ThirdTab:AddButton({
         end
 
         for Index, ItemData in Profile_GetCosmetics do
-            local ScanHex, ScanColorOk
-            if type(ItemData) == "table" then
-                ScanHex, ScanColorOk = HexRetention.Decode(ItemData.d)
-            end
-            if not ScanColorOk then
-                SV.RealCosmeticTable = nil
-                RecyclingItems = nil
-                Library:Notify("色碼資料無法確認，已停止掃描，沒有出售或回收。", 7)
-                return
-            end
             if ItemData.lock or ItemData.fav then
                 continue
             end
@@ -3755,7 +3619,7 @@ ThirdTab:AddButton({
                 table.insert(RealItemTable[VisualName], {
                     UUID = ItemData.uuid,
                     Name = ItemRef.InternalName,
-                    Dye = ScanHex
+                    Dye = Color3.new(ItemData.d.r, ItemData.d.g, ItemData.d.b):ToHex()
                 })
             end
         end
@@ -4483,15 +4347,6 @@ FourthTab:AddButton({
             end
 
             for Index, ItemData in Profile_GetCosmetics do
-                local ScanHex, ScanColorOk
-                if type(ItemData) == "table" then
-                    ScanHex, ScanColorOk = HexRetention.Decode(ItemData.d)
-                end
-                if not ScanColorOk then
-                    SV.RealCosmeticTable = nil
-                    Library:Notify("色碼資料無法確認，已停止掃描，沒有出售或回收。", 7)
-                    return
-                end
                 if ItemData.lock or ItemData.fav then
                     continue
                 end
@@ -4514,7 +4369,7 @@ FourthTab:AddButton({
                     table.insert(RealItemTable[VisualName], {
                         UUID = ItemData.uuid,
                         Name = ItemRef.InternalName,
-                        Dye = ScanHex
+                        Dye = Color3.new(ItemData.d.r, ItemData.d.g, ItemData.d.b):ToHex()
                     })
                 end
             end
@@ -4553,27 +4408,6 @@ FourthTab:AddButton({
 })
 FifthTab:AddLabel("<font color='#FF3333'>請使用逗號分隔每個色碼</font>\n輸入範例：\n<font color='#33FF33'>00ff00, a.a.b., [a-b].[1-2].e</font>", true)
     FifthTab:AddDivider()
-FifthTab:AddToggle("KeepTenPerSpecialHex", {
-    Text = "選取物品中：每個特殊色碼保留 10 件",
-    Default = false,
-    Tooltip = "關閉：特殊色全部保留。開啟：只在你選取的物品中，每色各留10件；未選取物品不占名額。開關本身不會處理物品。"
-})
-FifthTab:AddLabel("關閉＝特殊色全部保留。\n開啟＝選取物品中，每色至少留10件。\n不足10件全留；未選取物品不占名額。\n上鎖、收藏不處理，可能保留超過10件。\n\n例如：同色25件，留10件、處理15件。\n同色只有8件，就8件全部保留。\n每種完整色碼分開算，不是全部合計10件。\n不同外觀若同色，在選取範圍內一起算。\n\n先到「外觀」掃描並選取物品。\n再按下方「預覽」確認處理數量。\n確認後，才回「外觀」按回收或出售。\n只切換開關，不會自動處理物品。\n\n內建特殊色與輸入的保留色碼都適用。\n一般色／無色仍會依原規則列入處理。\n\n1. 切記：建議一次只選一種服裝／皮膚回收。\n2. 同時選多種服裝／皮膚時，\n相同特殊色碼合計只保留10件，\n不是每種服裝／皮膚各保留10件。\n3. 回收完務必回到「外觀」按「清除選取」。", true)
-FifthTab:AddButton({
-    Text = "預覽處理數量（不回收）",
-    Func = function()
-        if not (IsDungeon or IsWorld) then return end
-        local SelectedItems = {}
-        local Selection = Options.CosmeticDropdown.Value
-        if type(Selection) == "table" then
-            for Key, Value in pairs(Selection) do
-                if Value then SelectedItems[Key] = true end
-            end
-        end
-        RecycleFromInventory("Recycle", SelectedItems, true)
-    end
-})
-FifthTab:AddDivider()
 local NumberOfEnteredHexes = FifthTab:AddLabel("已儲存色碼數量：" ..FormatNumber(#SV.SpecialHexColors))
 local UserEnteredHexes = FifthTab:AddLabel("已保留的色碼：\n無\n＋（所有特殊色碼）", true)
     FifthTab:AddDivider()
@@ -5669,6 +5503,7 @@ if IsDungeon then
                     end,
                     StarbreakerWaves = function(Skill, AttackPosition)
                         task.spawn(function()
+                            if not CombatCharacterReady() then return end
                             if IsBoss then
                                 local Status = PlayerCharacter:FindFirstChild("Status")
                                 if Status and Status:FindFirstChild("Starforge") then
@@ -5683,8 +5518,10 @@ if IsDungeon then
                     end
                 }
                 repeat
+                    if not CombatCharacterReady() then task.wait(.1) continue end
                     for _, Attack in Class.Skills do
-                        if CurrentMob then
+                        if not CombatCharacterReady() then break end
+                        if CurrentMob and CurrentMob.Parent then
                             local AttackCooldown = Attack.Cooldown
                             if time() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay+PlayerPing then
                                 local AttackType = Attack.Type
@@ -5836,6 +5673,11 @@ if IsDungeon then
                         if KillSwitch then
                             SV.WZFMoverState = "stopped-killswitch"
                             break
+                        end
+                        if not CombatCharacterReady() then
+                            if TeleportTween then TeleportTween:Cancel() TeleportTween = nil end
+                            task.wait(.1)
+                            continue
                         end
                         if TempStop or HoldForRealTime or EventOverride then
                             if TeleportTween then
@@ -6051,26 +5893,38 @@ if IsDungeon then
                             CAttack:FireServer(Skill, AttackPosition, nil, AntiCheatNumber)
                         end,
                         Self = function()
-                            UseSkill:FireServer(PlayerCharacter, PlayerRoot.Position)
+                            local Root = PlayerRoot
+                            if not Root or not Root.Parent or not PlayerCharacter or Root.Parent ~= PlayerCharacter then return end
+                            UseSkill:FireServer(PlayerCharacter, Root.Position)
                         end,
                         MobPosition = function(Skill, AttackPosition)
                             UseSkill:FireServer(PlayerCharacter, AttackPosition)
                         end
                     }
-                    while PetKillaura and not KillSwitch do
+                    while PetKillaura and not KillSwitch and not ScriptUnloaded do
+                        if not PlayerRoot or not PlayerRoot.Parent or not PlayerCharacter
+                            or PlayerRoot.Parent ~= PlayerCharacter or not PetSkill or not PetSkill.Skills then
+                            task.wait(.1)
+                            continue
+                        end
                         for _, Attack in PetSkill.Skills do
+                            -- A previous skill may yield; refresh references for every attack.
+                            local ActiveRoot = PlayerRoot
+                            local Target = CurrentMob
+                            if not ActiveRoot or not ActiveRoot.Parent or ActiveRoot.Parent ~= PlayerCharacter
+                                or not Target or not Target.Parent then continue end
                             if CurrentMob then
                                 local AttackCooldown = Attack.Cooldown
                                 if tick() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay then
                                     local AttackType = Attack.Type
-                                    local MobCollider = CurrentMob:FindFirstChild("Collider")
+                                    local MobCollider = Target:FindFirstChild("Collider")
                                     if MobCollider then
                                         local AttackDistance = Attack.Distance
-                                        local PlayerSurface = PlayerRoot:GetClosestPointOnSurface(MobCollider.Position)
-                                        local MobSurface = MobCollider:GetClosestPointOnSurface(PlayerRoot.Position)
+                                        local PlayerSurface = ActiveRoot:GetClosestPointOnSurface(MobCollider.Position)
+                                        local MobSurface = MobCollider:GetClosestPointOnSurface(ActiveRoot.Position)
                                         local Distance = (PlayerSurface - MobSurface).Magnitude
                                         if Distance <= AttackDistance then
-                                            local TpTime = CurrentMob:GetAttribute("T")
+                                            local TpTime = Target:GetAttribute("T")
                                             if SV.Autofarm and IsBoss and not (TpTime and TpTime+0.2 < time()) then
                                                 break
                                             end
@@ -6138,10 +5992,10 @@ if IsDungeon then
     local CheckForRejoin
     local RestartChanged
     Toggles.RestartStuckToggle:OnChanged(function(ChangedValue) -- stuck restart
-        local TimeActivated = time()
+        local TimeActivated = (RestartChanged or 0) + 1
         RestartChanged = TimeActivated
         CheckForCharacter()
-        if not TimeActivated == RestartChanged then
+        if TimeActivated ~= RestartChanged then
             return
         end
         if ChangedValue then
@@ -6151,11 +6005,19 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed then
+                    if not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                        or IsMissionOver() or TempStop or SV.DodgingAttack
+                        or not (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                         CombatTimer = 0
                     elseif not HoldForRealTime then
+                        local Character = PlayerCharacter
                         task.wait(1)
-                        local Healthproperties = PlayerCharacter:FindFirstChild("HealthProperties", true)
+                        if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
+                        if not CombatCharacterReady() or PlayerCharacter ~= Character then
+                            CombatTimer = 0
+                            continue
+                        end
+                        local Healthproperties = Character:FindFirstChild("HealthProperties", true)
                         local OutOfCombat = Healthproperties and Healthproperties:FindFirstChild("OutOfCombat", true)
                         if Healthproperties and OutOfCombat then
                             if OutOfCombat.Value == 0 then
@@ -6164,7 +6026,10 @@ if IsDungeon then
                                 CombatTimer = 0
                             end
                         end
-                        if CombatTimer >= StuckDelay and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
+                        if CombatCharacterReady() and PlayerCharacter == Character and CombatTimer >= StuckDelay
+                            and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                                or IsMissionOver() or TempStop or SV.DodgingAttack)
+                            and (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                             KillSwitch = true
                             task.wait(2)
                             task.spawn(function()
@@ -6174,7 +6039,7 @@ if IsDungeon then
                         end
                     end
                     task.wait(.1)
-                until not CheckForRejoin
+                until not CheckForRejoin or TimeActivated ~= RestartChanged or ScriptUnloaded or KillSwitch
             end)
             if not Success then
                 SaveErrorToFile("RESTART STUCK", Result)
