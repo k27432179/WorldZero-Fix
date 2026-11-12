@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D3-retry-3s startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] D5b-stuck-character-retry-3s startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -865,6 +865,11 @@ local function CheckForCharacter(TimeStarted)
     return TimeStarted
 end
 
+local function CombatCharacterReady()
+    return PlayerCharacter ~= nil and LocalPlayer.Character == PlayerCharacter
+        and PlayerRoot ~= nil and PlayerRoot.Parent == PlayerCharacter
+        and PlayerCollider ~= nil and PlayerCollider.Parent == PlayerCharacter
+end
 SetGlobal("format number")
 local function FormatNumber(n)
     n = tostring(n)
@@ -1196,6 +1201,11 @@ local function MobScanner()
                 SV.WZFScannerState = "running"
                 while not KillSwitch do
                     SV.WZFScannerTick = os.clock()
+                    if not CombatCharacterReady() then
+                        CurrentMob, TeleportMob = nil, nil
+                        task.wait(.1)
+                        continue
+                    end
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1264,7 +1274,10 @@ local function MobScanner()
                             end
                         end
                         if not MobData.Invincible then
-                            local MobDistance = (MobData.Collider.Position - PlayerRoot.Position).Magnitude
+                            local Root = PlayerRoot
+                            local Collider = MobData.Collider or Mob:FindFirstChild("Collider")
+                            if not CombatCharacterReady() or not Collider or not Collider.Parent then continue end
+                            local MobDistance = (Collider.Position - Root.Position).Magnitude
                             if not MobData.BossTag then
                                 if MobDistance < ClosestMobDistance then
                                     ClosestMob = Mob
@@ -1408,6 +1421,11 @@ local function MobScanner()
                 SV.WZFScannerState = "running"
                 while not KillSwitch do
                     SV.WZFScannerTick = os.clock()
+                    if not CombatCharacterReady() then
+                        CurrentMob, TeleportMob = nil, nil
+                        task.wait(.1)
+                        continue
+                    end
                     if not CanTarget then
                         CurrentMob = nil
                         task.wait()
@@ -1458,6 +1476,7 @@ local function MobScanner()
                         if MobPriority then
                             continue
                         end
+                        if not CombatCharacterReady() then continue end
                         local MobDistance = (PlayerCollider.Position - MobCollider.Position).Magnitude
                         if AvoidMobs[Mob.Name] then
                             if MobDistance < ClosestAvoidDistance then
@@ -1881,6 +1900,13 @@ local function CollectChests()
                 break
             end
 
+            if ScriptUnloaded or KillSwitch then break end
+            if ChestIndex > 1 then
+                local ChestDelay = tonumber(SV.CollectChestsDelay) or 0.1
+                if ChestDelay ~= ChestDelay then ChestDelay = 0.1 end
+                task.wait(math.clamp(ChestDelay, 0.01, 5))
+            end
+            if ScriptUnloaded or KillSwitch then break end
             local ChestPrize
             print("[WZF][D2-CHEST] request:", ChestIndex, "job:", game.JobId)
             if ChestIndex == 1 then
@@ -2225,14 +2251,13 @@ local function EquipNewItemAdded()
         local PlayerEquips = ReplicatedStorage.PlayerEquips[LocalPlayer.Name]
         local EquipItem = Remotes:WaitForChild("Inventory_EquipItem", math.huge)
         ConnectionTable["ConnectEquipNewItems"] = ScanInventory.ChildAdded:Connect(function(NewItem)
+            EquipInProgress = EquipInProgress + 1
             local Success1, Result1 = pcall(function()
-                EquipInProgress = EquipInProgress + 1
                 task.wait(1)
                 if ISV.Debug then
                     print("Checking equip: ", NewItem)
                 end
                 if not NewItem:FindFirstChild("Level") then
-                    EquipInProgress = EquipInProgress - 1
                     return
                 end
                 for Index, Slot in EquipSlots do
@@ -2260,9 +2285,11 @@ local function EquipNewItemAdded()
                     end
                 end
                 task.wait(1)
-                EquipInProgress = EquipInProgress - 1
             end)
+            -- Release once on normal completion, early return, or protected error.
+            EquipInProgress = math.max(0, EquipInProgress - 1)
             if not Success1 then
+                warn("[WZF][D4] equip error; counter released:", tostring(Result1), "job:", game.JobId)
                 SaveErrorToFile("SCAN ITEM TO EQUIP", tostring(Result1), NewItem)
             end
         end)
@@ -2575,6 +2602,7 @@ end
 
 SetGlobal("teleport stand part")
 local function TeleportStandPart()
+    if not CombatCharacterReady() or not StandPartHeight then return end
     if PlayerStandPart then
         PlayerStandPart.CFrame = CFrame.new(PlayerCollider.Position.X, (PlayerCollider.Position.Y-StandPartHeight), PlayerCollider.Position.Z)
     end
@@ -2582,35 +2610,35 @@ end
 
 SetGlobal("dodge current attack")
 local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, AdjustZ)
+    if EventOverride or not CombatCharacterReady() then return end
+    SV.WZFDodgeGeneration = (SV.WZFDodgeGeneration or 0) + 1
+    local Generation = SV.WZFDodgeGeneration
+    local Root = PlayerRoot
+    local Character = PlayerCharacter
+    local PreviousStop, PreviousTarget = TempStop, CanTarget
     local Success, Result = pcall(function()
-        if EventOverride then
-            return
-        end
-        local ZOffset = AdjustZ or 0
-        local AttackName = AttackName or "[no name for attack given]"
         SV.DodgingAttack = true
         task.wait(DelayBeforeDodge)
-
-        if SV.SafeKillaura then
-            CanTarget = false
-        end
-
+        if ScriptUnloaded or KillSwitch or EventOverride or not CombatCharacterReady()
+            or PlayerRoot ~= Root or PlayerCharacter ~= Character or SV.WZFDodgeGeneration ~= Generation then return end
+        if SV.SafeKillaura then CanTarget = false end
         local DodgeStart = time() + DodgeLength
-        local DodgePosition = Vector3.new(PlayerRoot.Position.X, PlayerRoot.Position.Y+200, PlayerRoot.Position.Z+ZOffset)
-        Library:Notify("Dodging attack: "..AttackName, DodgeLength)
+        local DodgePosition = Root.Position + Vector3.new(0, 200, AdjustZ or 0)
+        Library:Notify("Dodging attack: " .. (AttackName or "[no name for attack given]"), DodgeLength)
         while time() < DodgeStart and not EventOverride do
+            if ScriptUnloaded or KillSwitch or not CombatCharacterReady() or PlayerRoot ~= Root
+                or SV.WZFDodgeGeneration ~= Generation then break end
             TempStop = true
-            PlayerRoot.CFrame = CFrame.new(DodgePosition)
+            Root.CFrame = CFrame.new(DodgePosition)
             TeleportStandPart()
             task.wait()
         end
-        TempStop = false
-        CanTarget = true
-        SV.DodgingAttack = nil
     end)
-    if not Success then
-        SaveErrorToFile("DODGING ATTACK", Result)
+    if SV and SV.WZFDodgeGeneration == Generation then
+        TempStop, CanTarget = PreviousStop, PreviousTarget
+        SV.DodgingAttack = nil
     end
+    if not Success and not ScriptUnloaded then SaveErrorToFile("DODGING ATTACK", Result) end
 end
 
 SetGlobal("teleport to orb")
@@ -3399,7 +3427,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲 版本號:V1.1.2 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.3 2026/11/11",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -3699,7 +3727,6 @@ ThirdTab:AddButton({
         end
         RecyclingItems = true
         if not SV.CanRequire then
-            RecyclingItems = nil
             Library:Notify("執行環境不支援此功能（缺少 require()）", 5)
             return
         end
@@ -5669,6 +5696,7 @@ if IsDungeon then
                     end,
                     StarbreakerWaves = function(Skill, AttackPosition)
                         task.spawn(function()
+                            if not CombatCharacterReady() then return end
                             if IsBoss then
                                 local Status = PlayerCharacter:FindFirstChild("Status")
                                 if Status and Status:FindFirstChild("Starforge") then
@@ -5683,8 +5711,10 @@ if IsDungeon then
                     end
                 }
                 repeat
+                    if not CombatCharacterReady() then task.wait(.1) continue end
                     for _, Attack in Class.Skills do
-                        if CurrentMob then
+                        if not CombatCharacterReady() then break end
+                        if CurrentMob and CurrentMob.Parent then
                             local AttackCooldown = Attack.Cooldown
                             if time() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay+PlayerPing then
                                 local AttackType = Attack.Type
@@ -5836,6 +5866,11 @@ if IsDungeon then
                         if KillSwitch then
                             SV.WZFMoverState = "stopped-killswitch"
                             break
+                        end
+                        if not CombatCharacterReady() then
+                            if TeleportTween then TeleportTween:Cancel() TeleportTween = nil end
+                            task.wait(.1)
+                            continue
                         end
                         if TempStop or HoldForRealTime or EventOverride then
                             if TeleportTween then
@@ -6051,26 +6086,38 @@ if IsDungeon then
                             CAttack:FireServer(Skill, AttackPosition, nil, AntiCheatNumber)
                         end,
                         Self = function()
-                            UseSkill:FireServer(PlayerCharacter, PlayerRoot.Position)
+                            local Root = PlayerRoot
+                            if not Root or not Root.Parent or not PlayerCharacter or Root.Parent ~= PlayerCharacter then return end
+                            UseSkill:FireServer(PlayerCharacter, Root.Position)
                         end,
                         MobPosition = function(Skill, AttackPosition)
                             UseSkill:FireServer(PlayerCharacter, AttackPosition)
                         end
                     }
-                    while PetKillaura and not KillSwitch do
+                    while PetKillaura and not KillSwitch and not ScriptUnloaded do
+                        if not PlayerRoot or not PlayerRoot.Parent or not PlayerCharacter
+                            or PlayerRoot.Parent ~= PlayerCharacter or not PetSkill or not PetSkill.Skills then
+                            task.wait(.1)
+                            continue
+                        end
                         for _, Attack in PetSkill.Skills do
+                            -- A previous skill may yield; refresh references for every attack.
+                            local ActiveRoot = PlayerRoot
+                            local Target = CurrentMob
+                            if not ActiveRoot or not ActiveRoot.Parent or ActiveRoot.Parent ~= PlayerCharacter
+                                or not Target or not Target.Parent then continue end
                             if CurrentMob then
                                 local AttackCooldown = Attack.Cooldown
                                 if tick() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay then
                                     local AttackType = Attack.Type
-                                    local MobCollider = CurrentMob:FindFirstChild("Collider")
+                                    local MobCollider = Target:FindFirstChild("Collider")
                                     if MobCollider then
                                         local AttackDistance = Attack.Distance
-                                        local PlayerSurface = PlayerRoot:GetClosestPointOnSurface(MobCollider.Position)
-                                        local MobSurface = MobCollider:GetClosestPointOnSurface(PlayerRoot.Position)
+                                        local PlayerSurface = ActiveRoot:GetClosestPointOnSurface(MobCollider.Position)
+                                        local MobSurface = MobCollider:GetClosestPointOnSurface(ActiveRoot.Position)
                                         local Distance = (PlayerSurface - MobSurface).Magnitude
                                         if Distance <= AttackDistance then
-                                            local TpTime = CurrentMob:GetAttribute("T")
+                                            local TpTime = Target:GetAttribute("T")
                                             if SV.Autofarm and IsBoss and not (TpTime and TpTime+0.2 < time()) then
                                                 break
                                             end
@@ -6138,10 +6185,10 @@ if IsDungeon then
     local CheckForRejoin
     local RestartChanged
     Toggles.RestartStuckToggle:OnChanged(function(ChangedValue) -- stuck restart
-        local TimeActivated = time()
+        local TimeActivated = (RestartChanged or 0) + 1
         RestartChanged = TimeActivated
         CheckForCharacter()
-        if not TimeActivated == RestartChanged then
+        if TimeActivated ~= RestartChanged then
             return
         end
         if ChangedValue then
@@ -6151,11 +6198,19 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed then
+                    if not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                        or IsMissionOver() or TempStop or SV.DodgingAttack
+                        or not (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                         CombatTimer = 0
                     elseif not HoldForRealTime then
+                        local Character = PlayerCharacter
                         task.wait(1)
-                        local Healthproperties = PlayerCharacter:FindFirstChild("HealthProperties", true)
+                        if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
+                        if not CombatCharacterReady() or PlayerCharacter ~= Character then
+                            CombatTimer = 0
+                            continue
+                        end
+                        local Healthproperties = Character:FindFirstChild("HealthProperties", true)
                         local OutOfCombat = Healthproperties and Healthproperties:FindFirstChild("OutOfCombat", true)
                         if Healthproperties and OutOfCombat then
                             if OutOfCombat.Value == 0 then
@@ -6164,7 +6219,10 @@ if IsDungeon then
                                 CombatTimer = 0
                             end
                         end
-                        if CombatTimer >= StuckDelay and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
+                        if CombatCharacterReady() and PlayerCharacter == Character and CombatTimer >= StuckDelay
+                            and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                                or IsMissionOver() or TempStop or SV.DodgingAttack)
+                            and (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                             KillSwitch = true
                             task.wait(2)
                             task.spawn(function()
@@ -6174,7 +6232,7 @@ if IsDungeon then
                         end
                     end
                     task.wait(.1)
-                until not CheckForRejoin
+                until not CheckForRejoin or TimeActivated ~= RestartChanged or ScriptUnloaded or KillSwitch
             end)
             if not Success then
                 SaveErrorToFile("RESTART STUCK", Result)
