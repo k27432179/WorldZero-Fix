@@ -729,7 +729,21 @@ local function SaveScriptToFiles(Link, File, Version, DeleteFile)
             local DownloadDates = HttpService:JSONDecode(readfile("JDRS/ignore/DD"))
             local FileName = "JDRS/ignore/" ..File
             if DeleteFile and isfile(FileName) then
-                delfile(FileName)
+                local Deleted, DeleteError = pcall(function()
+                    assert(type(delfile) == "function", "delfile unavailable")
+                    delfile(FileName)
+                    assert(not isfile(FileName), "cache file still exists")
+                end)
+                if not Deleted then
+                    -- Read-only fallback for this session; never trust the stale cache.
+                    warn("[WZF][CACHE] cannot replace cache; loading fresh data in memory:", File, tostring(DeleteError))
+                    local Source = game:HttpGet(Link)
+                    local Chunk, CompileError = loadstring(Source)
+                    assert(Chunk, CompileError)
+                    FileData = Chunk()
+                    assert(FileData ~= nil and FileData ~= "", "downloaded module returned no data")
+                    return
+                end
             end
 
             if not isfile(FileName) then
