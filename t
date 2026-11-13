@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] E1-combat-workers-retry-3s startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] E1-H2b-cover-recovery-fix startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -1303,6 +1303,12 @@ local function MobScanner()
                     else
                         CurrentMob = nil
                     end
+                    if SV.HeavenCycleActive then
+                        local Chosen = SV.HeavenChosenTarget
+                        CurrentMob = Chosen and Chosen.Parent and Chosen or nil
+                        TeleportMob = CurrentMob
+                        IsBoss = CurrentMob ~= nil and CurrentMob.Name == "BOSSSeraphiel"
+                    end
                     task.wait()
                 end
             else
@@ -1500,6 +1506,12 @@ local function MobScanner()
                     else
                         CurrentMob = nil
                     end
+                    if SV.HeavenCycleActive then
+                        local Chosen = SV.HeavenChosenTarget
+                        CurrentMob = Chosen and Chosen.Parent and Chosen or nil
+                        TeleportMob = CurrentMob
+                        IsBoss = CurrentMob ~= nil and CurrentMob.Name == "BOSSSeraphiel"
+                    end
                     task.wait()
                 end
             end
@@ -1676,7 +1688,10 @@ ConnectionTable["WZFTeleportInitFailed"] = TeleportService.TeleportInitFailed:Co
     SV.TransitionUnconfirmed = true
 end)
 SetGlobal("rejoin last dungeon")
-local function RejoinLastDungeon(DoRejoin)
+local function RejoinLastDungeon(DoRejoin, Reason)
+    if DoRejoin then
+        warn("[WZF][H2b-REJOIN] source:", Reason or "unspecified", "cover:", tostring(SV.HeavenCoverActive), "cycle:", tostring(SV.HeavenCycleActive), "job:", game.JobId)
+    end
     if DoRejoin and (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
         warn("[WZF][D2] recovery-to-hub suppressed during unresolved transition; job:", game.JobId)
         return
@@ -1746,7 +1761,7 @@ end
 SetGlobal("wait for game crash")
 do
     CoreGui:WaitForChild("RobloxPromptGui", math.huge):WaitForChild("promptOverlay", math.huge).ChildAdded:Once(function()
-        RejoinLastDungeon(true)
+        RejoinLastDungeon(true, "roblox-prompt-added")
     end)
 end
 
@@ -2610,7 +2625,7 @@ end
 
 SetGlobal("dodge current attack")
 local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, AdjustZ)
-    if EventOverride or not CombatCharacterReady() then return end
+    if SV.HeavenCycleActive or EventOverride or not CombatCharacterReady() then return end
     SV.WZFDodgeGeneration = (SV.WZFDodgeGeneration or 0) + 1
     local Generation = SV.WZFDodgeGeneration
     local Root = PlayerRoot
@@ -2619,14 +2634,14 @@ local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, Adj
     local Success, Result = pcall(function()
         SV.DodgingAttack = true
         task.wait(DelayBeforeDodge)
-        if ScriptUnloaded or KillSwitch or EventOverride or not CombatCharacterReady()
+        if ScriptUnloaded or KillSwitch or SV.HeavenCycleActive or EventOverride or not CombatCharacterReady()
             or PlayerRoot ~= Root or PlayerCharacter ~= Character or SV.WZFDodgeGeneration ~= Generation then return end
         if SV.SafeKillaura then CanTarget = false end
         local DodgeStart = time() + DodgeLength
         local DodgePosition = Root.Position + Vector3.new(0, 200, AdjustZ or 0)
         Library:Notify("Dodging attack: " .. (AttackName or "[no name for attack given]"), DodgeLength)
         while time() < DodgeStart and not EventOverride do
-            if ScriptUnloaded or KillSwitch or not CombatCharacterReady() or PlayerRoot ~= Root
+            if ScriptUnloaded or KillSwitch or SV.HeavenCycleActive or not CombatCharacterReady() or PlayerRoot ~= Root
                 or SV.WZFDodgeGeneration ~= Generation then break end
             TempStop = true
             Root.CFrame = CFrame.new(DodgePosition)
@@ -3431,7 +3446,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.4 2026/11/13",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.5 2026/11/14",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4654,6 +4669,10 @@ local function ToggleNightmare(ChangedValue, FunctionValue)
     end
 end
 
+FirstTab:AddToggle("HeavenSwordCycleToggle", {
+    Text="天堂王房：柱邊／法令之劍循環", Default=false,
+    Tooltip="僅已量測的天堂地圖。進王房後才開啟；優先法令之劍，無目標回柱邊。"
+})
 CreateToggles({
     { "ReplayMissionToggle", Text = "自動重開副本", Tab = FirstTab },
     { "CollectChestToggle", Text = "收集寶箱", Tab = FirstTab },
@@ -5766,7 +5785,7 @@ if IsDungeon then
                     local Target, Root = CurrentMob, PlayerRoot
                     local Collider = Perf.Target(Target)
                     local Skills = Class and Class.Skills
-                    if Collider and Skills and #Skills > 0 and not SV.DodgingAttack and not SV.TransitionPending then
+                    if Collider and Skills and #Skills > 0 and not SV.HeavenCoverActive and not SV.DodgingAttack and not SV.TransitionPending then
                         local MobSurface = Collider:GetClosestPointOnSurface(Root.Position)
                         local Distance = (Root:GetClosestPointOnSurface(Collider.Position) - MobSurface).Magnitude
                         local Count = #Skills
@@ -5838,7 +5857,7 @@ if IsDungeon then
                         if AttackCount == 1 then
                             task.spawn(function()
                                 repeat
-                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.TransitionPending then
+                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.HeavenCoverActive and not SV.TransitionPending then
                                         pcall(Actions.UseSkill, Actions, Skill)
                                     end
                                     task.wait()
@@ -5847,7 +5866,7 @@ if IsDungeon then
                         else
                             task.spawn(function()
                                 repeat
-                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.TransitionPending then
+                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.HeavenCoverActive and not SV.TransitionPending then
                                         pcall(Actions.UseSkill, Actions, Skill)
                                     end
                                     task.wait(.2)
@@ -5925,7 +5944,7 @@ if IsDungeon then
                 SV.WZFMoverState = "running"
                 while Perf.Alive("farm", Epoch) and SV.Autofarm do
                     SV.WZFMoverTick = os.clock()
-                    if not CombatCharacterReady() or TempStop or HoldForRealTime or EventOverride then
+                    if not CombatCharacterReady() or SV.HeavenCoverActive or TempStop or HoldForRealTime or EventOverride then
                         Perf.CancelTween()
                         LastRoot, LastCollider, LastGoal = nil, nil, nil
                         task.wait(.1)
@@ -6123,6 +6142,7 @@ if IsDungeon then
                         end
                         for _, Attack in PetSkill.Skills do
                             if not Perf.Alive("pet", Epoch) then break end
+                            if SV.HeavenCoverActive then continue end
                             -- A previous skill may yield; refresh references for every attack.
                             local ActiveRoot = PlayerRoot
                             local Target = CurrentMob
@@ -6222,7 +6242,7 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                    if SV.HeavenCoverActive or not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
                         or IsMissionOver() or TempStop or SV.DodgingAttack
                         or not (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                         CombatTimer = 0
@@ -6230,7 +6250,7 @@ if IsDungeon then
                         local Character = PlayerCharacter
                         task.wait(1)
                         if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
-                        if not CombatCharacterReady() or PlayerCharacter ~= Character then
+                        if SV.HeavenCoverActive or not CombatCharacterReady() or PlayerCharacter ~= Character then
                             CombatTimer = 0
                             continue
                         end
@@ -6244,13 +6264,20 @@ if IsDungeon then
                             end
                         end
                         if CombatCharacterReady() and PlayerCharacter == Character and CombatTimer >= StuckDelay
-                            and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                            and not (SV.HeavenCoverActive or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
                                 or IsMissionOver() or TempStop or SV.DodgingAttack)
                             and (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
-                            KillSwitch = true
                             task.wait(2)
+                            if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
+                            if SV.HeavenCoverActive or SV.TransitionPending or SV.RestartSelecting
+                                or IsMissionOver() or not CombatCharacterReady() or PlayerCharacter ~= Character then
+                                CombatTimer = 0
+                                continue
+                            end
+                            warn("[WZF][H2b] stuck threshold reached:", CombatTimer, "job:", game.JobId)
+                            KillSwitch = true
                             task.spawn(function()
-                                RejoinLastDungeon(true)
+                                RejoinLastDungeon(true, "stuck-timer")
                             end)
                             break
                         end
@@ -7678,19 +7705,23 @@ if IsDungeon then
                     local BossRoomTrigger = MissionObjects:WaitForChild("BossRoom", math.huge):WaitForChild("BossDoorTrigger", math.huge)
                     local TouchTransmitter = BossRoomTrigger:WaitForChild("TouchInterest", math.huge)
                     BossRoomTrigger = BossRoomTrigger.Position
+                    local DoorTween
                     TempStop = true
                     repeat
                         if SV.Autofarm then
+                            if SV.HeavenCycleActive then break end
                             local EndPos = { CFrame = CFrame.new(BossRoomTrigger.X, BossRoomTrigger.Y, BossRoomTrigger.Z)}
                             local Distance = (PlayerRoot.Position - BossRoomTrigger).Magnitude / 100
                             local tweenInfo = TweenInfo.new(Distance, Enum.EasingStyle.Linear)
-                            local tween = TweenService:Create(PlayerRoot, tweenInfo, EndPos)
+                            if DoorTween then DoorTween:Cancel() end
+                            DoorTween = TweenService:Create(PlayerRoot, tweenInfo, EndPos)
                             PlayerRoot.Velocity = Vector3.new()
                             TeleportStandPart()
-                            tween:Play()
+                            DoorTween:Play()
                         end
                         task.wait()
-                    until not TouchTransmitter.Parent or KillSwitch
+                    until not TouchTransmitter.Parent or KillSwitch or SV.HeavenCycleActive
+                    if DoorTween then DoorTween:Cancel() end
                     TempStop = false
                 end)
                 
@@ -7712,6 +7743,102 @@ if IsDungeon then
                     end)
                 end)
 
+                -- H2 is based on the user's verified world-space return, not H1's old point.
+                task.spawn(function()
+                    local Room = MissionObjects:WaitForChild("BossRoom", math.huge)
+                    local Center = Room:WaitForChild("ArenaCenter", math.huge)
+                    local Safe = CFrame.new(-321.46991, 44.2760086, -930.732849,
+                        .689127803, 1.61968643e-8, .724639833,
+                        -7.05198815e-8, 1, 4.4712344e-8,
+                        -.724639833, -8.19140311e-8, .689127803)
+                    local ExpectedCenter = Vector3.new(-491.811707, 2, -1044.53699)
+                    local Armed, LastLog, LastState = false, 0, nil
+                    local MobModule
+                    if SV.CanRequire then local OK, Data = pcall(require, SMobs) if OK then MobModule = Data end end
+                    local function Clear()
+                        SV.HeavenCycleActive, SV.HeavenCoverActive, SV.HeavenChosenTarget = false, false, nil
+                        Armed = false
+                    end
+                    local function Valid(Mob, Strict)
+                        if not Mob or not Mob.Parent then return false, "absent" end
+                        local Collider = Mob:FindFirstChild("Collider")
+                        if not Collider or not Collider:IsA("BasePart") then return false, "no-collider" end
+                        local HP = Mob:FindFirstChild("HealthProperties")
+                        local Health = HP and HP:FindFirstChild("Health")
+                        if Health and Health.Value <= 0 then return false, "dead" end
+                        local Flags = ISV.MobTable[Mob]
+                        if (Flags and Flags.Invincible) or Mob:GetAttribute("Invincible") == true then return false, "invincible" end
+                        local OK, Live = pcall(function() return MobModule and MobModule:GetMobData(Mob) end)
+                        if OK and type(Live) == "table" then
+                            if Live.Invincible then return false, "live-invincible" end
+                            if Strict and Live.Invincible ~= false then return false, "invulnerability-unknown" end
+                        elseif Strict then return false, "live-data-unavailable" end
+                        if Strict and not Health then return false, "health-unknown" end
+                        return true, "ready"
+                    end
+                    local OK, Error = pcall(function()
+                        while not ScriptUnloaded and not KillSwitch and Center.Parent do
+                            local Enabled = Toggles.HeavenSwordCycleToggle.Value
+                            if not Enabled or not SV.Autofarm or SV.TransitionPending or IsMissionOver() then
+                                Clear()
+                                task.wait(.1)
+                                continue
+                            end
+                            local LayoutOK = game.PlaceId == 128961185668563
+                                and (Center.Position - ExpectedCenter).Magnitude < 1
+                            if not LayoutOK then
+                                Clear()
+                                if os.clock()-LastLog>5 then warn("[WZF][H2] map/layout mismatch; no movement") LastLog=os.clock() end
+                                task.wait(.2)
+                                continue
+                            end
+                            if not CombatCharacterReady() then
+                                SV.HeavenChosenTarget, SV.HeavenCoverActive = nil, false
+                                task.wait(.1)
+                                continue
+                            end
+                            local Root = PlayerRoot
+                            if not Armed then
+                                local P = Root.Position - Center.Position
+                                if Vector2.new(P.X,P.Z).Magnitude > 260 or math.abs(P.Y)>100 then
+                                    if os.clock()-LastLog>5 then warn("[WZF][H2] waiting for player to enter boss arena") LastLog=os.clock() end
+                                    task.wait(.1)
+                                    continue
+                                end
+                                Armed = true
+                                SV.HeavenCycleActive = true
+                                Perf.CancelTween()
+                            end
+                            local Sword = Mobs:FindFirstChild("SwordOfDecree")
+                            local SwordOK, SwordReason = Valid(Sword, false)
+                            local Boss = Mobs:FindFirstChild("BOSSSeraphiel")
+                            local BossOK, BossReason = Valid(Boss, true)
+                            local Props = Boss and Boss:FindFirstChild("MobProperties")
+                            local Attack = Props and Props:FindFirstChild("CurrentAttack")
+                            local AttackName = Attack and tostring(Attack.Value) or "none"
+                            local Chosen, State = nil, "cover"
+                            if SwordOK then Chosen, State = Sword, "sword"
+                            elseif BossOK and AttackName ~= "JudgmentWalls" and AttackName ~= "BurdenOfLight" then Chosen, State = Boss, "boss" end
+                            SV.HeavenChosenTarget, SV.HeavenCoverActive = Chosen, Chosen == nil
+                            CurrentMob, TeleportMob = Chosen, Chosen
+                            IsBoss = Chosen == Boss and Boss ~= nil
+                            if not Chosen then
+                                Perf.CancelTween()
+                                Root.CFrame = Safe
+                                Root.AssemblyLinearVelocity = Vector3.zero
+                                TeleportStandPart()
+                            end
+                            if State~=LastState or os.clock()-LastLog>=5 then
+                                print("[WZF][H2] state:",State,"sword:",SwordReason,"boss:",BossReason,
+                                    "attack:",AttackName,"judgment:",tostring(PlayerCharacter:GetAttribute("Judgment")),"job:",game.JobId)
+                                LastState,LastLog=State,os.clock()
+                            end
+                            task.wait(.05)
+                        end
+                    end)
+                    Clear()
+                    if not OK then warn("[WZF][H2] stopped:",tostring(Error)) end
+                end)
                 local BOSSSeraphiel = Mobs:WaitForChild("BOSSSeraphiel", math.huge)
                 if BOSSSeraphiel then
                     local ArenaCenter = MissionObjects:WaitForChild("BossRoom", math.huge):WaitForChild("ArenaCenter", math.huge)
@@ -7721,7 +7848,7 @@ if IsDungeon then
                         repeat
                             local DistanceFromCenter = 75 + (ArenaCenter.Size.X/2)
                             RotationAroundCenter = RotationAroundCenter + (ArenaRotationSpeed / DistanceFromCenter)
-                            if not CurrentMob and SV.Autofarm then
+                            if not SV.HeavenCycleActive and not CurrentMob and SV.Autofarm and CombatCharacterReady() then
                                 PlayerRoot.CFrame = CFrame.new(ArenaCenter.Position) * CFrame.Angles(0, math.rad(RotationAroundCenter), 0) * CFrame.new(DistanceFromCenter, 25, 0)
                                 PlayerRoot.CFrame = CFrame.new(PlayerRoot.Position, Vector3.new(ArenaCenter.Position.X, PlayerRoot.Position.Y, ArenaCenter.Position.Z))
                                 TeleportStandPart()
@@ -7736,7 +7863,7 @@ if IsDungeon then
                                 return Mobs:WaitForChild("BOSSSeraphiel", math.huge):WaitForChild("MobProperties", math.huge):WaitForChild("CurrentAttack", math.huge)
                             end
                             ConnectionTable["HEAVENRAIDBOSS"] = GetBossAttack().Changed:Connect(function(CurrentAttack)
-                                if CurrentAttack and SV.Autofarm then
+                                if CurrentAttack and SV.Autofarm and not SV.HeavenCycleActive then
                                     if CurrentAttack == "JudgmentWalls" then
                                         DodgeCurrentAttack(1.5, 11.5, "judgment walls")
                                     elseif CurrentAttack == "BurdenOfLight" then
