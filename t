@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] D5b-stuck-character-retry-3s startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] E1-H2b-cover-recovery-fix startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -729,7 +729,21 @@ local function SaveScriptToFiles(Link, File, Version, DeleteFile)
             local DownloadDates = HttpService:JSONDecode(readfile("JDRS/ignore/DD"))
             local FileName = "JDRS/ignore/" ..File
             if DeleteFile and isfile(FileName) then
-                delfile(FileName)
+                local Deleted, DeleteError = pcall(function()
+                    assert(type(delfile) == "function", "delfile unavailable")
+                    delfile(FileName)
+                    assert(not isfile(FileName), "cache file still exists")
+                end)
+                if not Deleted then
+                    -- Read-only fallback for this session; never trust the stale cache.
+                    warn("[WZF][CACHE] cannot replace cache; loading fresh data in memory:", File, tostring(DeleteError))
+                    local Source = game:HttpGet(Link)
+                    local Chunk, CompileError = loadstring(Source)
+                    assert(Chunk, CompileError)
+                    FileData = Chunk()
+                    assert(FileData ~= nil and FileData ~= "", "downloaded module returned no data")
+                    return
+                end
             end
 
             if not isfile(FileName) then
@@ -1303,6 +1317,12 @@ local function MobScanner()
                     else
                         CurrentMob = nil
                     end
+                    if SV.HeavenCycleActive then
+                        local Chosen = SV.HeavenChosenTarget
+                        CurrentMob = Chosen and Chosen.Parent and Chosen or nil
+                        TeleportMob = CurrentMob
+                        IsBoss = CurrentMob ~= nil and CurrentMob.Name == "BOSSSeraphiel"
+                    end
                     task.wait()
                 end
             else
@@ -1500,6 +1520,12 @@ local function MobScanner()
                     else
                         CurrentMob = nil
                     end
+                    if SV.HeavenCycleActive then
+                        local Chosen = SV.HeavenChosenTarget
+                        CurrentMob = Chosen and Chosen.Parent and Chosen or nil
+                        TeleportMob = CurrentMob
+                        IsBoss = CurrentMob ~= nil and CurrentMob.Name == "BOSSSeraphiel"
+                    end
                     task.wait()
                 end
             end
@@ -1676,7 +1702,10 @@ ConnectionTable["WZFTeleportInitFailed"] = TeleportService.TeleportInitFailed:Co
     SV.TransitionUnconfirmed = true
 end)
 SetGlobal("rejoin last dungeon")
-local function RejoinLastDungeon(DoRejoin)
+local function RejoinLastDungeon(DoRejoin, Reason)
+    if DoRejoin then
+        warn("[WZF][H2b-REJOIN] source:", Reason or "unspecified", "cover:", tostring(SV.HeavenCoverActive), "cycle:", tostring(SV.HeavenCycleActive), "job:", game.JobId)
+    end
     if DoRejoin and (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed) then
         warn("[WZF][D2] recovery-to-hub suppressed during unresolved transition; job:", game.JobId)
         return
@@ -1746,7 +1775,7 @@ end
 SetGlobal("wait for game crash")
 do
     CoreGui:WaitForChild("RobloxPromptGui", math.huge):WaitForChild("promptOverlay", math.huge).ChildAdded:Once(function()
-        RejoinLastDungeon(true)
+        RejoinLastDungeon(true, "roblox-prompt-added")
     end)
 end
 
@@ -2610,7 +2639,7 @@ end
 
 SetGlobal("dodge current attack")
 local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, AdjustZ)
-    if EventOverride or not CombatCharacterReady() then return end
+    if SV.HeavenCycleActive or EventOverride or not CombatCharacterReady() then return end
     SV.WZFDodgeGeneration = (SV.WZFDodgeGeneration or 0) + 1
     local Generation = SV.WZFDodgeGeneration
     local Root = PlayerRoot
@@ -2619,14 +2648,14 @@ local function DodgeCurrentAttack(DelayBeforeDodge, DodgeLength, AttackName, Adj
     local Success, Result = pcall(function()
         SV.DodgingAttack = true
         task.wait(DelayBeforeDodge)
-        if ScriptUnloaded or KillSwitch or EventOverride or not CombatCharacterReady()
+        if ScriptUnloaded or KillSwitch or SV.HeavenCycleActive or EventOverride or not CombatCharacterReady()
             or PlayerRoot ~= Root or PlayerCharacter ~= Character or SV.WZFDodgeGeneration ~= Generation then return end
         if SV.SafeKillaura then CanTarget = false end
         local DodgeStart = time() + DodgeLength
         local DodgePosition = Root.Position + Vector3.new(0, 200, AdjustZ or 0)
         Library:Notify("Dodging attack: " .. (AttackName or "[no name for attack given]"), DodgeLength)
         while time() < DodgeStart and not EventOverride do
-            if ScriptUnloaded or KillSwitch or not CombatCharacterReady() or PlayerRoot ~= Root
+            if ScriptUnloaded or KillSwitch or SV.HeavenCycleActive or not CombatCharacterReady() or PlayerRoot ~= Root
                 or SV.WZFDodgeGeneration ~= Generation then break end
             TempStop = true
             Root.CFrame = CFrame.new(DodgePosition)
@@ -2748,15 +2777,19 @@ local function BuildAttackData(TargetTable, TargetIndex)
 end
 
 SetGlobal("get player pet")
-local function GetPlayerPet()
-    CheckForCharacter()
+local function GetPlayerPet(IsCancelled)
+    local function Cancelled() return ScriptUnloaded or KillSwitch or (IsCancelled and IsCancelled()) end
+    while not Cancelled() and not CombatCharacterReady() do task.wait(.1) end
+    if Cancelled() then return end
     local rPets = require(Pets)
-    while not (KillSwitch or ScriptUnloaded) do
+    while not Cancelled() do
         local PetData = PlayerCharacter and PlayerCharacter:FindFirstChild("PetData")
         if PetData and PetSkills then
             task.wait(.5)
+            if Cancelled() then return end
+            if not CombatCharacterReady() or PetData.Parent ~= PlayerCharacter then continue end
             local ItemName = PetData:GetAttribute("ItemName")
-            if ItemName and string.find(tostring(ItemName), "Egg") then
+            if not ItemName or string.find(tostring(ItemName), "Egg") then
                 task.wait(1)
                 continue
             end
@@ -3427,7 +3460,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.3 2026/11/11",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.5 2026/11/14",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -4650,6 +4683,10 @@ local function ToggleNightmare(ChangedValue, FunctionValue)
     end
 end
 
+FirstTab:AddToggle("HeavenSwordCycleToggle", {
+    Text="天堂王房：柱邊／法令之劍循環", Default=false,
+    Tooltip="僅已量測的天堂地圖。進王房後才開啟；優先法令之劍，無目標回柱邊。"
+})
 CreateToggles({
     { "ReplayMissionToggle", Text = "自動重開副本", Tab = FirstTab },
     { "CollectChestToggle", Text = "收集寶箱", Tab = FirstTab },
@@ -5619,6 +5656,47 @@ FirstTab:AddButton({
             end
         })
 end -- for unloaded config tab
+-- Worker epochs survive yielding callbacks; disabling never waits for a character.
+local Perf = { Epoch = {}, Errors = {} }
+function Perf.Alive(Key, Epoch)
+    return Perf.Epoch[Key] == Epoch and not ScriptUnloaded and not KillSwitch
+        and Library and not Library.Unloaded
+end
+function Perf.Begin(Key)
+    Perf.Epoch[Key] = (Perf.Epoch[Key] or 0) + 1
+    return Perf.Epoch[Key]
+end
+function Perf.Wait(Key, Epoch, Enabled, Stamp)
+    if not Enabled then return Stamp end
+    while Perf.Alive(Key, Epoch) and not CombatCharacterReady() do task.wait(.1) end
+    return Perf.Alive(Key, Epoch) and Stamp or nil
+end
+function Perf.Target(Mob)
+    if not Mob or not Mob.Parent or not CombatCharacterReady() then return nil end
+    local Flags = ISV.MobTable[Mob]
+    if (Flags and Flags.Invincible) or Mob:GetAttribute("Invincible") == true then return nil end
+    local HP = Mob:FindFirstChild("HealthProperties")
+    local Health = HP and HP:FindFirstChild("Health")
+    if Health and Health.Value <= 0 then return nil end
+    local Collider = Mob:FindFirstChild("Collider")
+    if Collider and Collider:IsA("BasePart") and Collider.Parent then return Collider end
+end
+function Perf.Send(Attack, Callback, Position)
+    -- Reserve the original cooldown on every attempt, including a failed send.
+    Attack.LastUsed = time()
+    local OK, Error = pcall(Callback, Attack.Skill, Position)
+    if not OK then
+        local Key = tostring(Attack.Skill)
+        if not Perf.Errors[Key] or os.clock() - Perf.Errors[Key] > 10 then
+            Perf.Errors[Key] = os.clock()
+            warn("[WZF][E1] attack failed; worker continues:", Key, tostring(Error))
+        end
+    end
+    return OK
+end
+function Perf.CancelTween()
+    if Perf.Tween then Perf.Tween:Cancel() Perf.Tween = nil end
+end
 SetGlobal("creating UI functions")
 
 if not SV.GeneralTab then
@@ -5626,9 +5704,11 @@ SetGlobal("general tab functions")
 if IsDungeon then
     local KillauraChanged
     Toggles.KillauraToggle:OnChanged(function(ChangedValue) -- killaura
+        local Epoch = Perf.Begin("aura")
+        if not ChangedValue then SV.Killaura = nil end
         local TimeActivated = os.clock()
-        KillauraChanged = CheckForCharacter(TimeActivated)
-        if TimeActivated ~= KillauraChanged then
+        KillauraChanged = Perf.Wait("aura", Epoch, ChangedValue, TimeActivated)
+        if TimeActivated ~= KillauraChanged or Perf.Epoch.aura ~= Epoch then
             return
         end
         
@@ -5639,12 +5719,16 @@ if IsDungeon then
             end
             SV.Killaura = true
             local Success, Result = pcall(function()
+                DisconnectVariable("ConnectClass")
                 ConnectionTable["ConnectClass"] = LocalPlayer:GetAttributeChangedSignal("Class"):Connect(function()
-                    Class = GetPlayerClass()
+                    if not Perf.Alive("aura", Epoch) then return end
+                    local Updated = GetPlayerClass()
+                    if Perf.Alive("aura", Epoch) then Class = Updated end
                 end)
                 if SV.CanRequire then
                     pcall(function()
                         local Actions = require(Client:WaitForChild("Actions", math.huge))
+                        if Perf.Epoch.aura ~= Epoch then return end
                         Actions:SetSkillDisabled("Primary", true)
                         Actions:SetSkillDisabled("Skill1", true)
                         Actions:SetSkillDisabled("Skill2", true)
@@ -5696,7 +5780,7 @@ if IsDungeon then
                     end,
                     StarbreakerWaves = function(Skill, AttackPosition)
                         task.spawn(function()
-                            if not CombatCharacterReady() then return end
+                            if not Perf.Alive("aura", Epoch) or not SV.Killaura or not CombatCharacterReady() then return end
                             if IsBoss then
                                 local Status = PlayerCharacter:FindFirstChild("Status")
                                 if Status and Status:FindFirstChild("Starforge") then
@@ -5710,46 +5794,39 @@ if IsDungeon then
                         end)
                     end
                 }
-                repeat
-                    if not CombatCharacterReady() then task.wait(.1) continue end
-                    for _, Attack in Class.Skills do
-                        if not CombatCharacterReady() then break end
-                        if CurrentMob and CurrentMob.Parent then
-                            local AttackCooldown = Attack.Cooldown
-                            if time() - (Attack.LastUsed or 0) >= AttackCooldown+AddedDelay+PlayerPing then
-                                local AttackType = Attack.Type
-                                local MobCollider = CurrentMob:FindFirstChild("Collider")
-                                if MobCollider then
-                                    local AttackDistance = Attack.Distance
-                                    local PlayerSurface = PlayerRoot:GetClosestPointOnSurface(MobCollider.Position)
-                                    local MobSurface = MobCollider:GetClosestPointOnSurface(PlayerRoot.Position)
-                                    local Distance = (PlayerSurface - MobSurface).Magnitude
-                                    if Distance <= AttackDistance then
-                                        if SV.Autofarm and IsBoss then
-                                            local TpTime = CurrentMob:GetAttribute("T")
-                                            if not (TpTime and TpTime+0.2 < time()) then
-                                                break
-                                            end
-                                        end
-                                        local FindAttackType = AttackArgs[AttackType]
-                                        if FindAttackType then
-                                            FindAttackType(Attack.Skill, MobSurface)
-                                        else
-                                            SV.Killaura = nil
-                                            SaveErrorToFile("KILLAURA ATTACK TYPE", "invalid attack type or attack type not supported", AttackType)
-                                            break
-                                        end
-                                        Attack.LastUsed = time()
-                                        if DelayAttacks and not IsBoss then
-                                            task.wait(DelayAttacks)
-                                        end
-                                    end
+                local Cursor = 1
+                while Perf.Alive("aura", Epoch) and SV.Killaura do
+                    local Target, Root = CurrentMob, PlayerRoot
+                    local Collider = Perf.Target(Target)
+                    local Skills = Class and Class.Skills
+                    if Collider and Skills and #Skills > 0 and not SV.HeavenCoverActive and not SV.DodgingAttack and not SV.TransitionPending then
+                        local MobSurface = Collider:GetClosestPointOnSurface(Root.Position)
+                        local Distance = (Root:GetClosestPointOnSurface(Collider.Position) - MobSurface).Magnitude
+                        local Count = #Skills
+                        -- Round-robin only among ready, in-range skills; do not shorten cooldowns.
+                        for Visit = 1, Count do
+                            if not Perf.Alive("aura", Epoch) or not SV.Killaura then break end
+                            local Index = ((Cursor + Visit - 2) % Count) + 1
+                            local Attack = Skills[Index]
+                            if time() - (Attack.LastUsed or 0) >= Attack.Cooldown + AddedDelay + PlayerPing
+                                and Distance <= Attack.Distance then
+                                local TpTime = Target:GetAttribute("T")
+                                if SV.Autofarm and IsBoss and not (TpTime and TpTime + .2 < time()) then break end
+                                local Handler = AttackArgs[Attack.Type]
+                                if Handler then
+                                    Perf.Send(Attack, Handler, MobSurface)
+                                    Cursor = Index % Count + 1
+                                    if DelayAttacks and not IsBoss then task.wait(DelayAttacks) end
+                                    break -- Recompute target geometry after each dispatch/yield.
+                                else
+                                    Attack.LastUsed = time()
+                                    warn("[WZF][E1] unsupported attack type:", tostring(Attack.Type))
                                 end
                             end
                         end
                     end
                     task.wait()
-                until not SV.Killaura
+                end
             end)
             if not Success then
                 SaveErrorToFile("KILLAURA", Result, SV.PlayerClass)
@@ -5758,6 +5835,7 @@ if IsDungeon then
             if SV.CanRequire then
                 pcall(function()
                     local Actions = require(Client:WaitForChild("Actions", math.huge))
+                        if Perf.Epoch.aura ~= Epoch then return end
                     Actions:SetSkillDisabled("Primary", false)
                     Actions:SetSkillDisabled("Skill1", false)
                     Actions:SetSkillDisabled("Skill2", false)
@@ -5765,14 +5843,19 @@ if IsDungeon then
                     Actions:SetSkillDisabled("Ultimate", false)
                 end)
             end
-            DisconnectVariable("ConnectClass")
-            SV.Killaura = nil
+            if Perf.Epoch.aura == Epoch then
+                DisconnectVariable("ConnectClass")
+                SV.Killaura = nil
+            end
         end
     end)
     Toggles.SafeKillauraToggle:OnChanged(function(ChangedValue) -- killaura
+        local Epoch = Perf.Begin("safe")
+        SV.SafeKillaura = ChangedValue and true or nil
         if SV.CanRequire and EF.Hook and EF.ClearHook and EF.NewClosure and EF.CheckHook then
             local Success, Result = pcall(function()
                 local Actions = require(Client.Actions)
+                if Perf.Epoch.safe ~= Epoch then return end
                 if ChangedValue then
                     SV.SafeKillaura = true
                     if SV.IsRanged then
@@ -5788,26 +5871,26 @@ if IsDungeon then
                         if AttackCount == 1 then
                             task.spawn(function()
                                 repeat
-                                    if CurrentMob then
-                                        Actions:UseSkill(Skill)
+                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.HeavenCoverActive and not SV.TransitionPending then
+                                        pcall(Actions.UseSkill, Actions, Skill)
                                     end
                                     task.wait()
-                                until not (SV.SafeKillaura or KillSwitch)
+                                until not SV.SafeKillaura or not Perf.Alive("safe", Epoch)
                             end)
                         else
                             task.spawn(function()
                                 repeat
-                                    if CurrentMob then
-                                        Actions:UseSkill(Skill)
+                                    if Perf.Alive("safe", Epoch) and CombatCharacterReady() and Perf.Target(CurrentMob) and not SV.HeavenCoverActive and not SV.TransitionPending then
+                                        pcall(Actions.UseSkill, Actions, Skill)
                                     end
                                     task.wait(.2)
-                                until not (SV.SafeKillaura or KillSwitch)
+                                until not SV.SafeKillaura or not Perf.Alive("safe", Epoch)
                             end)
                         end
                         AttackCount = AttackCount + 1
                     end
-                    while SV.SafeKillaura do
-                        if Actions:IsSheathed() then
+                    while SV.SafeKillaura and Perf.Alive("safe", Epoch) do
+                        if CombatCharacterReady() and Actions:IsSheathed() then
                             Actions:UseSkill("Sheath")
                         end
                         task.wait(1)
@@ -5823,7 +5906,7 @@ if IsDungeon then
         elseif mouse1click and keyclick then
             local Success, Result = pcall(function()
                 if ChangedValue then
-                    while SV.SafeKillaura do
+                    while SV.SafeKillaura and Perf.Alive("safe", Epoch) do
                         mouse1click(1, 1)
                         keyclick(Enum.KeyCode.E)
                         keyclick(Enum.KeyCode.R)
@@ -5842,186 +5925,139 @@ if IsDungeon then
             Library:Notify("Your executor doesn't support this", 5)
         end
     end)
-    local CurrentCamera = Workspace.CurrentCamera
-    local AutofarmChanged
-    Toggles.AutoProgressToggle:OnChanged(function(ChangedValue)
-        print("[WZF][AF] callback:", tostring(ChangedValue), "job:", game.JobId)
-        local TimeActivated = os.clock()
-        AutofarmChanged = CheckForCharacter(TimeActivated)
-        if TimeActivated ~= AutofarmChanged then
+    local function ReleaseShield()
+        if Perf.Shield then
+            TempStop, CanTarget = Perf.Shield.Stop, Perf.Shield.Target
+            Perf.Shield = nil
+        end
+    end
+    Toggles.AutoProgressToggle:OnChanged(function(Enabled)
+        local Epoch = Perf.Begin("farm")
+        Perf.CancelTween()
+        ReleaseShield()
+        SV.Autofarm = Enabled and true or nil
+        print("[WZF][E1] farm:", Enabled, "epoch:", Epoch)
+        if not Enabled then
+            if PlayerRoot then PlayerRoot.CanCollide = true end
+            for Part, Data in TeleportParts do
+                if Part.Parent then
+                    Part.Size, Part.CanCollide, Part.Position = Data.OriginalSize, Data.OriginalCollision, Data.OriginalLocation
+                end
+            end
+            local Camera = Workspace.CurrentCamera
+            if Camera then Camera.CameraSubject = (SV.PlayerCamera and SV.PlayerCamera.Parent and SV.PlayerCamera)
+                or (PlayerCharacter and PlayerCharacter:FindFirstChildOfClass("Humanoid")) end
+            SV.WZFMoverState = "toggle-off"
             return
         end
-
-        if ChangedValue then
-            SV.Autofarm = true
-            task.spawn(function()
-                local Success, Result = pcall(function()
-                    SV.WZFMoverState = "running"
-                    local RotationAroundMob = 0
-                    PlayerRoot.CanCollide = false
-                    local LastCollider
-                    local TeleportTween
-                    while SV.Autofarm do
-                        SV.WZFMoverTick = os.clock()
-                        if KillSwitch then
-                            SV.WZFMoverState = "stopped-killswitch"
-                            break
-                        end
-                        if not CombatCharacterReady() then
-                            if TeleportTween then TeleportTween:Cancel() TeleportTween = nil end
-                            task.wait(.1)
-                            continue
-                        end
-                        if TempStop or HoldForRealTime or EventOverride then
-                            if TeleportTween then
-                                TeleportTween:Cancel()
-                                TeleportTween = nil
-                            end
-                            task.wait(.1)
-                            continue
-                        end
-                        if TeleportMob then
-                            PlayerRoot.Velocity = Vector3.zero
-                            local MobCollider = TeleportMob and TeleportMob:FindFirstChild("Collider")
-
-                            if MobCollider then
-                                local DistanceFromMob = (PlayerRoot.Position - MobCollider.Position).Magnitude
-                                local PlayerOffset = Xdistance + (MobCollider.Size.X / 2)
-                                RotationAroundMob += MobRotationSpeed / PlayerOffset
-
-                                local TargetCFrame = CFrame.new(MobCollider.Position) * CFrame.Angles(0, math.rad(RotationAroundMob), 0) * CFrame.new(PlayerOffset, Ydistance, 0)
-                                TargetCFrame = CFrame.lookAt(TargetCFrame.Position, Vector3.new(MobCollider.Position.X, TargetCFrame.Position.Y, MobCollider.Position.Z))
-
-                                if MobCollider ~= LastCollider or DistanceFromMob > 200 then
-                                    if TeleportTween then
-                                        TeleportTween:Cancel()
-                                        TeleportTween = nil
-                                    end
-
-                                    PlayerRoot.CFrame = TargetCFrame
-                                    LastCollider = MobCollider
-                                else
-                                    TeleportTween = TweenService:Create(PlayerRoot, TweenInfo.new((PlayerRoot.Position - MobCollider.Position).Magnitude / 70, Enum.EasingStyle.Linear), {CFrame = TargetCFrame})
-                                    TeleportTween:Play()
-                                end
-                                if IsBoss and not TeleportMob:GetAttribute("T") then
-                                    TeleportMob:SetAttribute("T", time())
-                                end
-
-                                if IsMobCamera and CurrentCamera.CameraSubject ~= TeleportMob then
-                                    CurrentCamera.CameraSubject = TeleportMob
-                                end
-                            end
-                        else
-                            if TeleportTween then
-                                TeleportTween:Cancel()
-                                TeleportTween = nil
-                            end
-                        end
-                        TeleportStandPart()
-                        task.wait()
+        if not Perf.Wait("farm", Epoch, true, true) then return end
+        task.spawn(function()
+            local LastRoot, LastCollider, LastGoal
+            local LastUpdate, Angle = 0, 0
+            local OK, Error = pcall(function()
+                SV.WZFMoverState = "running"
+                while Perf.Alive("farm", Epoch) and SV.Autofarm do
+                    SV.WZFMoverTick = os.clock()
+                    if not CombatCharacterReady() or SV.HeavenCoverActive or TempStop or HoldForRealTime or EventOverride then
+                        Perf.CancelTween()
+                        LastRoot, LastCollider, LastGoal = nil, nil, nil
+                        task.wait(.1)
+                        continue
                     end
-                    if not SV.Autofarm then SV.WZFMoverState = "toggle-off" end
-                end)
-                if not Success then
-                    SV.WZFMoverState = "error"
-                    warn("[WZF][AF] mover failed:", tostring(Result), "job:", game.JobId)
-                    SaveErrorToFile("MOB TELEPORT", Result)
+                    local Root, Mob = PlayerRoot, TeleportMob
+                    Root.CanCollide = false
+                    local Collider = Mob and Mob.Parent and Mob:FindFirstChild("Collider")
+                    if Collider and Collider:IsA("BasePart") then
+                        Root.AssemblyLinearVelocity = Vector3.zero
+                        local Offset = Xdistance + Collider.Size.X / 2
+                        if math.abs(Offset) < .1 then Offset = .1 end
+                        Angle += MobRotationSpeed / Offset
+                        local Goal = CFrame.new(Collider.Position) * CFrame.Angles(0, math.rad(Angle), 0) * CFrame.new(Offset, Ydistance, 0)
+                        Goal = CFrame.lookAt(Goal.Position, Vector3.new(Collider.Position.X, Goal.Position.Y, Collider.Position.Z))
+                        local Distance = (Root.Position - Collider.Position).Magnitude
+                        if Root ~= LastRoot or Collider ~= LastCollider or Distance > 200 then
+                            Perf.CancelTween()
+                            Root.CFrame = Goal
+                            LastRoot, LastCollider, LastGoal, LastUpdate = Root, Collider, Goal, os.clock()
+                        elseif os.clock() - LastUpdate >= .12 and (not LastGoal or (Goal.Position - LastGoal.Position).Magnitude >= .75
+                            or Goal.LookVector:Dot(LastGoal.LookVector) < .995) then
+                            Perf.CancelTween()
+                            Perf.Tween = TweenService:Create(Root, TweenInfo.new(math.clamp(Distance / 70, .08, 1), Enum.EasingStyle.Linear), {CFrame = Goal})
+                            Perf.Tween:Play()
+                            LastGoal, LastUpdate = Goal, os.clock()
+                        end
+                        if IsBoss and not Mob:GetAttribute("T") then Mob:SetAttribute("T", time()) end
+                        local Camera = Workspace.CurrentCamera
+                        if IsMobCamera and Camera and Camera.CameraSubject ~= Mob then Camera.CameraSubject = Mob end
+                    else
+                        Perf.CancelTween()
+                        LastCollider, LastGoal = nil, nil
+                    end
+                    TeleportStandPart()
+                    task.wait()
                 end
             end)
-            task.spawn(function()
-                local Success, Result = pcall(function()
-                    for Part, PartData in TeleportParts do
-                        if Part and Part.Parent then
-                            Part.Size = Vector3.new(1, 1, 1)
-                            Part.CanCollide = false
-                        end
-                    end
-                    while SV.Autofarm do
-                        for Part, PartData in TeleportParts do
-                            if not SV.StopTeleportingParts then
-                                if PartData.DontTeleport then
-                                    continue
-                                end
-                                if Part.Parent and PartData.TouchPart.Parent then
-                                    task.spawn(function()
-                                        Part.Position = PlayerRoot.Position
-                                        task.wait(0.1)
-                                        Part.Position = PartData.OriginalLocation
-                                    end)
-                                else
-                                    if not PartData.Regenerates then
-                                        TeleportParts[Part] = nil
-                                    end
-                                end
-                            end
-                        end
-                        task.wait()
-                    end
-                end)
-                if not Success then
-                    SaveErrorToFile("AUTO PROGRESS", Result)
-                end
-            end)
-            task.spawn(function()
-                local Success, Result = pcall(function()
-                    local ShieldDungeons = {
-                        16, 21, 38, 44, 52
-                    }
-                    local ShieldNames = {
-                        "IceWall", "IgnisShield", "ZeroShield", "ShieldEgg", "EggShield"
-                    }
-                    if table.find(ShieldDungeons, ISV.MissionId) or SV.PartyRaidID == 14 then
-                        while SV.Autofarm do
-                            for Index, Shield in ShieldNames do
-                                local CheckShield = Workspace:FindFirstChild(Shield)
-                                if CheckShield then
-                                    if CheckShield.Name == "ShieldEgg" or CheckShield.Name == "EggShield" then
-                                        local ChangeEggName = CheckShield:WaitForChild("ShieldEgg", 1) or CheckShield:WaitForChild("Blade", 1)
-                                        if ChangeEggName then
-                                            ChangeEggName.Name = "Ring"
-                                        end
-                                    end
-                                    local Ring = CheckShield:WaitForChild("Ring", 5)
-                                    if Ring and Ring.Parent then
-                                        local PlayerSize = GetPlayerSize() + (Ring.Size.Y / 2)
-                                        local ShieldPosition = Vector3.new(Ring.Position.X, Ring.Position.Y + PlayerSize, Ring.Position.Z)
-                                        TempStop = true
-                                        CanTarget = false
-                                        while CheckShield.Parent do
-                                            PlayerRoot.CFrame = CFrame.new(ShieldPosition)
-                                            task.wait()
-                                        end
-                                        TempStop = false
-                                        CanTarget = true
-                                    end
-                                end
-                                task.wait()
-                            end
-                            task.wait(.5)
-                        end
-                    end
-                end)
-                if not Success then
-                    SaveErrorToFile("SHIELD TELEPORT", Result)
-                end
-            end)
-        else
-            PlayerRoot.CanCollide = true
-            for Part, PartData in TeleportParts do
-                if Part and Part.Parent then
-                    Part.Size = PartData.OriginalSize
-                    Part.CanCollide = PartData.OriginalCollision
-                    Part.Position = PartData.OriginalLocation
-                end
+            if Perf.Epoch.farm == Epoch then
+                Perf.CancelTween()
+                SV.WZFMoverState = OK and "stopped" or "error"
+                if not OK then warn("[WZF][E1] mover failed:", tostring(Error)) end
             end
-            if SV.PlayerCamera and SV.PlayerCamera.Parent and PlayerRoot == SV.PlayerCamera.Parent then
-                workspace.CurrentCamera.CameraSubject = SV.PlayerCamera
-            else
-                workspace.CurrentCamera.CameraSubject = PlayerRoot:WaitForChild("Part", math.huge)
+        end)
+        task.spawn(function()
+            local BusyParts = {}
+            while Perf.Alive("farm", Epoch) and SV.Autofarm do
+                if CombatCharacterReady() then
+                    for Part, Data in TeleportParts do
+                        if not Perf.Alive("farm", Epoch) then break end
+                        if Part.Parent then Part.Size = Vector3.one Part.CanCollide = false end
+                        if not SV.StopTeleportingParts and not Data.DontTeleport and Part.Parent and Data.TouchPart and Data.TouchPart.Parent and not BusyParts[Part] then
+                            BusyParts[Part] = true
+                            task.spawn(function()
+                                pcall(function()
+                                    if not Perf.Alive("farm", Epoch) or not CombatCharacterReady() then return end
+                                    Part.Position = PlayerRoot.Position
+                                    task.wait(.1)
+                                    if Perf.Alive("farm", Epoch) and Part.Parent then Part.Position = Data.OriginalLocation end
+                                end)
+                                BusyParts[Part] = nil
+                            end)
+                        elseif not Part.Parent and not Data.Regenerates then TeleportParts[Part] = nil end
+                    end
+                end
+                task.wait(.1)
             end
-            SV.Autofarm = nil
-        end
+        end)
+        task.spawn(function()
+            if not table.find({16, 21, 38, 44, 52}, ISV.MissionId) and SV.PartyRaidID ~= 14 then return end
+            local OK, Error = pcall(function()
+                while Perf.Alive("farm", Epoch) and SV.Autofarm do
+                    for _, Name in {"IceWall", "IgnisShield", "ZeroShield", "ShieldEgg", "EggShield"} do
+                        local Shield = Workspace:FindFirstChild(Name)
+                        if Shield then
+                            if Name == "ShieldEgg" or Name == "EggShield" then
+                                local Rename = Shield:WaitForChild("ShieldEgg", 1) or Shield:WaitForChild("Blade", 1)
+                                if Rename then Rename.Name = "Ring" end
+                            end
+                            local Ring = Shield:WaitForChild("Ring", 5)
+                            if not Perf.Alive("farm", Epoch) or not SV.Autofarm then return end
+                            if Ring and Ring.Parent and CombatCharacterReady() then
+                                Perf.Shield = {Stop = TempStop, Target = CanTarget}
+                                TempStop, CanTarget = true, false
+                                while Shield.Parent and Perf.Alive("farm", Epoch) and SV.Autofarm do
+                                    if not CombatCharacterReady() then break end
+                                    PlayerRoot.CFrame = CFrame.new(Ring.Position + Vector3.new(0, GetPlayerSize() + Ring.Size.Y / 2, 0))
+                                    task.wait()
+                                end
+                                if Perf.Epoch.farm == Epoch then ReleaseShield() end
+                            end
+                        end
+                    end
+                    task.wait(.5)
+                end
+            end)
+            if Perf.Epoch.farm == Epoch then ReleaseShield() end
+            if not OK then warn("[WZF][E1] shield worker failed:", tostring(Error)) end
+        end)
     end)
 end
 if not IsMainMenu then
@@ -6061,9 +6097,11 @@ if IsDungeon then
     local PetKillaura
     local PetKillauraChanged
     Toggles.PetKillauraToggle:OnChanged(function(ChangedValue) -- use pet skill
+        local Epoch = Perf.Begin("pet")
+        if not ChangedValue then PetKillaura = nil end
         local TimeActivated = os.clock()
-        PetKillauraChanged = CheckForCharacter(TimeActivated)
-        if TimeActivated ~= PetKillauraChanged then
+        PetKillauraChanged = Perf.Wait("pet", Epoch, ChangedValue, TimeActivated)
+        if TimeActivated ~= PetKillauraChanged or Perf.Epoch.pet ~= Epoch then
             return
         end
 
@@ -6072,11 +6110,15 @@ if IsDungeon then
             if SV.CanRequire then
                 local Success, Result = pcall(function()
                     local UseSkill = Remotes:WaitForChild("PetSkills_UseSkill", math.huge)
-                    local PetSkill = GetPlayerPet()
+                    local PetSkill = GetPlayerPet(function() return not Perf.Alive("pet", Epoch) or not PetKillaura end)
+                    if not Perf.Alive("pet", Epoch) then return end
+                    local PetCharacter = PlayerCharacter
 
+                    DisconnectVariable("ConnectCharacter")
                     ConnectionTable["ConnectCharacter"] = PlayerCharacter.ChildAdded:Connect(function(NewChild)
                         if NewChild.Name == "PetData" then
-                            PetSkill = GetPlayerPet()
+                            local Updated = GetPlayerPet(function() return not Perf.Alive("pet", Epoch) end)
+                            if Perf.Alive("pet", Epoch) then PetSkill = Updated end
                         end
                     end)
 
@@ -6094,17 +6136,31 @@ if IsDungeon then
                             UseSkill:FireServer(PlayerCharacter, AttackPosition)
                         end
                     }
-                    while PetKillaura and not KillSwitch and not ScriptUnloaded do
+                    while PetKillaura and Perf.Alive("pet", Epoch) and not KillSwitch and not ScriptUnloaded do
+                        if CombatCharacterReady() and PetCharacter ~= PlayerCharacter then
+                            DisconnectVariable("ConnectCharacter")
+                            PetCharacter = PlayerCharacter
+                            PetSkill = GetPlayerPet(function() return not Perf.Alive("pet", Epoch) end)
+                            if not Perf.Alive("pet", Epoch) then return end
+                            ConnectionTable["ConnectCharacter"] = PetCharacter.ChildAdded:Connect(function(Child)
+                                if Child.Name == "PetData" then
+                                    local Updated = GetPlayerPet(function() return not Perf.Alive("pet", Epoch) end)
+                                    if Perf.Alive("pet", Epoch) then PetSkill = Updated end
+                                end
+                            end)
+                        end
                         if not PlayerRoot or not PlayerRoot.Parent or not PlayerCharacter
                             or PlayerRoot.Parent ~= PlayerCharacter or not PetSkill or not PetSkill.Skills then
                             task.wait(.1)
                             continue
                         end
                         for _, Attack in PetSkill.Skills do
+                            if not Perf.Alive("pet", Epoch) then break end
+                            if SV.HeavenCoverActive then continue end
                             -- A previous skill may yield; refresh references for every attack.
                             local ActiveRoot = PlayerRoot
                             local Target = CurrentMob
-                            if not ActiveRoot or not ActiveRoot.Parent or ActiveRoot.Parent ~= PlayerCharacter
+                            if not Perf.Target(Target) or not ActiveRoot or not ActiveRoot.Parent or ActiveRoot.Parent ~= PlayerCharacter
                                 or not Target or not Target.Parent then continue end
                             if CurrentMob then
                                 local AttackCooldown = Attack.Cooldown
@@ -6123,7 +6179,7 @@ if IsDungeon then
                                             end
                                             local FindAttackType = AttackArgs[AttackType]
                                             if FindAttackType then
-                                                FindAttackType(Attack.Skill, MobSurface)
+                                                Perf.Send(Attack, FindAttackType, MobSurface)
                                             else
                                                 SV.PetKillaura = nil
                                                 SaveErrorToFile("PET ATTACK TYPE", "invalid attack type or attack type not supported", AttackType)
@@ -6141,6 +6197,7 @@ if IsDungeon then
                         task.wait(.1)
                     end
                 end)
+                if not Perf.Alive("pet", Epoch) then return end
                 if not Success then
                     local PetData = PlayerCharacter and PlayerCharacter:FindFirstChild("PetData")
                     if PetData and PetSkills and SV.CanRequire then
@@ -6163,7 +6220,7 @@ if IsDungeon then
             else
                 local Success, Result = pcall(function()
                     local UseSkill = Remotes:WaitForChild("PetSkills_UseSkill", math.huge)
-                    while PetKillaura and not KillSwitch do
+                    while PetKillaura and Perf.Alive("pet", Epoch) and not KillSwitch do
                         if CurrentMob then
                             local MobCollider = CurrentMob:FindFirstChild("Collider", true)
                             if MobCollider then
@@ -6173,6 +6230,7 @@ if IsDungeon then
                         task.wait(1)
                     end
                 end)
+                if not Perf.Alive("pet", Epoch) then return end
                 if not Success then
                     SaveErrorToFile("PET KILLAURA FALLBACK", Result)
                 end
@@ -6198,7 +6256,7 @@ if IsDungeon then
                 RejoinLastDungeon(false)
                 local CombatTimer = 0
                 repeat
-                    if not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                    if SV.HeavenCoverActive or not CombatCharacterReady() or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
                         or IsMissionOver() or TempStop or SV.DodgingAttack
                         or not (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
                         CombatTimer = 0
@@ -6206,7 +6264,7 @@ if IsDungeon then
                         local Character = PlayerCharacter
                         task.wait(1)
                         if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
-                        if not CombatCharacterReady() or PlayerCharacter ~= Character then
+                        if SV.HeavenCoverActive or not CombatCharacterReady() or PlayerCharacter ~= Character then
                             CombatTimer = 0
                             continue
                         end
@@ -6220,13 +6278,20 @@ if IsDungeon then
                             end
                         end
                         if CombatCharacterReady() and PlayerCharacter == Character and CombatTimer >= StuckDelay
-                            and not (SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
+                            and not (SV.HeavenCoverActive or SV.RestartSelecting or SV.TransitionPending or SV.TransitionUnconfirmed
                                 or IsMissionOver() or TempStop or SV.DodgingAttack)
                             and (SV.Autofarm or SV.Killaura or SV.SafeKillaura) then
-                            KillSwitch = true
                             task.wait(2)
+                            if ScriptUnloaded or KillSwitch or TimeActivated ~= RestartChanged or not CheckForRejoin then break end
+                            if SV.HeavenCoverActive or SV.TransitionPending or SV.RestartSelecting
+                                or IsMissionOver() or not CombatCharacterReady() or PlayerCharacter ~= Character then
+                                CombatTimer = 0
+                                continue
+                            end
+                            warn("[WZF][H2b] stuck threshold reached:", CombatTimer, "job:", game.JobId)
+                            KillSwitch = true
                             task.spawn(function()
-                                RejoinLastDungeon(true)
+                                RejoinLastDungeon(true, "stuck-timer")
                             end)
                             break
                         end
@@ -7654,19 +7719,23 @@ if IsDungeon then
                     local BossRoomTrigger = MissionObjects:WaitForChild("BossRoom", math.huge):WaitForChild("BossDoorTrigger", math.huge)
                     local TouchTransmitter = BossRoomTrigger:WaitForChild("TouchInterest", math.huge)
                     BossRoomTrigger = BossRoomTrigger.Position
+                    local DoorTween
                     TempStop = true
                     repeat
                         if SV.Autofarm then
+                            if SV.HeavenCycleActive then break end
                             local EndPos = { CFrame = CFrame.new(BossRoomTrigger.X, BossRoomTrigger.Y, BossRoomTrigger.Z)}
                             local Distance = (PlayerRoot.Position - BossRoomTrigger).Magnitude / 100
                             local tweenInfo = TweenInfo.new(Distance, Enum.EasingStyle.Linear)
-                            local tween = TweenService:Create(PlayerRoot, tweenInfo, EndPos)
+                            if DoorTween then DoorTween:Cancel() end
+                            DoorTween = TweenService:Create(PlayerRoot, tweenInfo, EndPos)
                             PlayerRoot.Velocity = Vector3.new()
                             TeleportStandPart()
-                            tween:Play()
+                            DoorTween:Play()
                         end
                         task.wait()
-                    until not TouchTransmitter.Parent or KillSwitch
+                    until not TouchTransmitter.Parent or KillSwitch or SV.HeavenCycleActive
+                    if DoorTween then DoorTween:Cancel() end
                     TempStop = false
                 end)
                 
@@ -7688,6 +7757,102 @@ if IsDungeon then
                     end)
                 end)
 
+                -- H2 is based on the user's verified world-space return, not H1's old point.
+                task.spawn(function()
+                    local Room = MissionObjects:WaitForChild("BossRoom", math.huge)
+                    local Center = Room:WaitForChild("ArenaCenter", math.huge)
+                    local Safe = CFrame.new(-321.46991, 44.2760086, -930.732849,
+                        .689127803, 1.61968643e-8, .724639833,
+                        -7.05198815e-8, 1, 4.4712344e-8,
+                        -.724639833, -8.19140311e-8, .689127803)
+                    local ExpectedCenter = Vector3.new(-491.811707, 2, -1044.53699)
+                    local Armed, LastLog, LastState = false, 0, nil
+                    local MobModule
+                    if SV.CanRequire then local OK, Data = pcall(require, SMobs) if OK then MobModule = Data end end
+                    local function Clear()
+                        SV.HeavenCycleActive, SV.HeavenCoverActive, SV.HeavenChosenTarget = false, false, nil
+                        Armed = false
+                    end
+                    local function Valid(Mob, Strict)
+                        if not Mob or not Mob.Parent then return false, "absent" end
+                        local Collider = Mob:FindFirstChild("Collider")
+                        if not Collider or not Collider:IsA("BasePart") then return false, "no-collider" end
+                        local HP = Mob:FindFirstChild("HealthProperties")
+                        local Health = HP and HP:FindFirstChild("Health")
+                        if Health and Health.Value <= 0 then return false, "dead" end
+                        local Flags = ISV.MobTable[Mob]
+                        if (Flags and Flags.Invincible) or Mob:GetAttribute("Invincible") == true then return false, "invincible" end
+                        local OK, Live = pcall(function() return MobModule and MobModule:GetMobData(Mob) end)
+                        if OK and type(Live) == "table" then
+                            if Live.Invincible then return false, "live-invincible" end
+                            if Strict and Live.Invincible ~= false then return false, "invulnerability-unknown" end
+                        elseif Strict then return false, "live-data-unavailable" end
+                        if Strict and not Health then return false, "health-unknown" end
+                        return true, "ready"
+                    end
+                    local OK, Error = pcall(function()
+                        while not ScriptUnloaded and not KillSwitch and Center.Parent do
+                            local Enabled = Toggles.HeavenSwordCycleToggle.Value
+                            if not Enabled or not SV.Autofarm or SV.TransitionPending or IsMissionOver() then
+                                Clear()
+                                task.wait(.1)
+                                continue
+                            end
+                            local LayoutOK = game.PlaceId == 128961185668563
+                                and (Center.Position - ExpectedCenter).Magnitude < 1
+                            if not LayoutOK then
+                                Clear()
+                                if os.clock()-LastLog>5 then warn("[WZF][H2] map/layout mismatch; no movement") LastLog=os.clock() end
+                                task.wait(.2)
+                                continue
+                            end
+                            if not CombatCharacterReady() then
+                                SV.HeavenChosenTarget, SV.HeavenCoverActive = nil, false
+                                task.wait(.1)
+                                continue
+                            end
+                            local Root = PlayerRoot
+                            if not Armed then
+                                local P = Root.Position - Center.Position
+                                if Vector2.new(P.X,P.Z).Magnitude > 260 or math.abs(P.Y)>100 then
+                                    if os.clock()-LastLog>5 then warn("[WZF][H2] waiting for player to enter boss arena") LastLog=os.clock() end
+                                    task.wait(.1)
+                                    continue
+                                end
+                                Armed = true
+                                SV.HeavenCycleActive = true
+                                Perf.CancelTween()
+                            end
+                            local Sword = Mobs:FindFirstChild("SwordOfDecree")
+                            local SwordOK, SwordReason = Valid(Sword, false)
+                            local Boss = Mobs:FindFirstChild("BOSSSeraphiel")
+                            local BossOK, BossReason = Valid(Boss, true)
+                            local Props = Boss and Boss:FindFirstChild("MobProperties")
+                            local Attack = Props and Props:FindFirstChild("CurrentAttack")
+                            local AttackName = Attack and tostring(Attack.Value) or "none"
+                            local Chosen, State = nil, "cover"
+                            if SwordOK then Chosen, State = Sword, "sword"
+                            elseif BossOK and AttackName ~= "JudgmentWalls" and AttackName ~= "BurdenOfLight" then Chosen, State = Boss, "boss" end
+                            SV.HeavenChosenTarget, SV.HeavenCoverActive = Chosen, Chosen == nil
+                            CurrentMob, TeleportMob = Chosen, Chosen
+                            IsBoss = Chosen == Boss and Boss ~= nil
+                            if not Chosen then
+                                Perf.CancelTween()
+                                Root.CFrame = Safe
+                                Root.AssemblyLinearVelocity = Vector3.zero
+                                TeleportStandPart()
+                            end
+                            if State~=LastState or os.clock()-LastLog>=5 then
+                                print("[WZF][H2] state:",State,"sword:",SwordReason,"boss:",BossReason,
+                                    "attack:",AttackName,"judgment:",tostring(PlayerCharacter:GetAttribute("Judgment")),"job:",game.JobId)
+                                LastState,LastLog=State,os.clock()
+                            end
+                            task.wait(.05)
+                        end
+                    end)
+                    Clear()
+                    if not OK then warn("[WZF][H2] stopped:",tostring(Error)) end
+                end)
                 local BOSSSeraphiel = Mobs:WaitForChild("BOSSSeraphiel", math.huge)
                 if BOSSSeraphiel then
                     local ArenaCenter = MissionObjects:WaitForChild("BossRoom", math.huge):WaitForChild("ArenaCenter", math.huge)
@@ -7697,7 +7862,7 @@ if IsDungeon then
                         repeat
                             local DistanceFromCenter = 75 + (ArenaCenter.Size.X/2)
                             RotationAroundCenter = RotationAroundCenter + (ArenaRotationSpeed / DistanceFromCenter)
-                            if not CurrentMob and SV.Autofarm then
+                            if not SV.HeavenCycleActive and not CurrentMob and SV.Autofarm and CombatCharacterReady() then
                                 PlayerRoot.CFrame = CFrame.new(ArenaCenter.Position) * CFrame.Angles(0, math.rad(RotationAroundCenter), 0) * CFrame.new(DistanceFromCenter, 25, 0)
                                 PlayerRoot.CFrame = CFrame.new(PlayerRoot.Position, Vector3.new(ArenaCenter.Position.X, PlayerRoot.Position.Y, ArenaCenter.Position.Z))
                                 TeleportStandPart()
@@ -7712,7 +7877,7 @@ if IsDungeon then
                                 return Mobs:WaitForChild("BOSSSeraphiel", math.huge):WaitForChild("MobProperties", math.huge):WaitForChild("CurrentAttack", math.huge)
                             end
                             ConnectionTable["HEAVENRAIDBOSS"] = GetBossAttack().Changed:Connect(function(CurrentAttack)
-                                if CurrentAttack and SV.Autofarm then
+                                if CurrentAttack and SV.Autofarm and not SV.HeavenCycleActive then
                                     if CurrentAttack == "JudgmentWalls" then
                                         DodgeCurrentAttack(1.5, 11.5, "judgment walls")
                                     elseif CurrentAttack == "BurdenOfLight" then
