@@ -10,7 +10,7 @@ if _G.ScriptRunning then
     return
 end
 _G.ScriptRunning = true -- prevent script from being loaded twice
-print("[WZF] E1-H2b-cover-recovery-fix startup:", game.PlaceId, "job:", game.JobId)
+print("[WZF] E1-H2h-original-orbit-10s startup:", game.PlaceId, "job:", game.JobId)
 -- Read-only startup watchdog: leaves gameplay and settings unchanged.
 task.delay(15, function()
     if _G.ScriptRunning and _G.ScriptStep ~= "end" then
@@ -3460,7 +3460,7 @@ Toggles = Library.Toggles
 SetGlobal("creating window")
 local Window = Library:CreateWindow({
     Title = "World Zero",
-    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.5 2026/11/14",
+    Footer = "大哥，阿成，揚，99，有米，八八八，哲，洛克，June，宸宸 版本號:V1.1.6 2026/11/14",
     Icon = 17210785932,
     NotifySide = "Right",
     AutoShow = false,
@@ -7723,7 +7723,6 @@ if IsDungeon then
                     TempStop = true
                     repeat
                         if SV.Autofarm then
-                            if SV.HeavenCycleActive then break end
                             local EndPos = { CFrame = CFrame.new(BossRoomTrigger.X, BossRoomTrigger.Y, BossRoomTrigger.Z)}
                             local Distance = (PlayerRoot.Position - BossRoomTrigger).Magnitude / 100
                             local tweenInfo = TweenInfo.new(Distance, Enum.EasingStyle.Linear)
@@ -7734,8 +7733,12 @@ if IsDungeon then
                             DoorTween:Play()
                         end
                         task.wait()
-                    until not TouchTransmitter.Parent or KillSwitch or SV.HeavenCycleActive
+                    until not TouchTransmitter.Parent or KillSwitch
                     if DoorTween then DoorTween:Cancel() end
+                    if not KillSwitch and not TouchTransmitter.Parent then
+                        SV.HeavenDoorCompleted = true
+                        print("[WZF][H2h] entrance movement completed; job:", game.JobId)
+                    end
                     TempStop = false
                 end)
                 
@@ -7767,11 +7770,14 @@ if IsDungeon then
                         -.724639833, -8.19140311e-8, .689127803)
                     local ExpectedCenter = Vector3.new(-491.811707, 2, -1044.53699)
                     local Armed, LastLog, LastState = false, 0, nil
+                    local OrbitRoot, OrbitSince
+                    local EntryRotation = math.random(0, 360)
                     local MobModule
                     if SV.CanRequire then local OK, Data = pcall(require, SMobs) if OK then MobModule = Data end end
                     local function Clear()
                         SV.HeavenCycleActive, SV.HeavenCoverActive, SV.HeavenChosenTarget = false, false, nil
                         Armed = false
+                        OrbitRoot, OrbitSince = nil, nil
                     end
                     local function Valid(Mob, Strict)
                         if not Mob or not Mob.Parent then return false, "absent" end
@@ -7807,21 +7813,48 @@ if IsDungeon then
                                 continue
                             end
                             if not CombatCharacterReady() then
-                                SV.HeavenChosenTarget, SV.HeavenCoverActive = nil, false
+                                Clear()
                                 task.wait(.1)
                                 continue
                             end
                             local Root = PlayerRoot
                             if not Armed then
-                                local P = Root.Position - Center.Position
-                                if Vector2.new(P.X,P.Z).Magnitude > 260 or math.abs(P.Y)>100 then
-                                    if os.clock()-LastLog>5 then warn("[WZF][H2] waiting for player to enter boss arena") LastLog=os.clock() end
+                                if not SV.HeavenDoorCompleted then
+                                    if os.clock()-LastLog>5 then
+                                        print("[WZF][H2h] waiting for entrance movement; job:", game.JobId)
+                                        LastLog=os.clock()
+                                    end
                                     task.wait(.1)
                                     continue
                                 end
-                                Armed = true
-                                SV.HeavenCycleActive = true
+                                -- Own the entry orbit so normal following cannot interrupt its ten seconds.
+                                SV.HeavenCycleActive, SV.HeavenCoverActive = true, true
+                                SV.HeavenChosenTarget = nil
+                                CurrentMob, TeleportMob, IsBoss = nil, nil, false
                                 Perf.CancelTween()
+                                if OrbitRoot ~= Root then
+                                    OrbitRoot, OrbitSince = Root, nil
+                                    print("[WZF][H2h] original orbit started; duration: 10 seconds; job:", game.JobId)
+                                end
+                                -- Same radius, height, angle increment and frame cadence as the original orbit.
+                                local DistanceFromCenter = 75 + (Center.Size.X/2)
+                                EntryRotation = EntryRotation + (30 / DistanceFromCenter)
+                                Root.CFrame = CFrame.new(Center.Position) * CFrame.Angles(0, math.rad(EntryRotation), 0) * CFrame.new(DistanceFromCenter, 25, 0)
+                                Root.CFrame = CFrame.new(Root.Position, Vector3.new(Center.Position.X, Root.Position.Y, Center.Position.Z))
+                                Root.AssemblyLinearVelocity = Vector3.zero
+                                TeleportStandPart()
+                                OrbitSince = OrbitSince or os.clock()
+                                if os.clock()-OrbitSince < 10 then
+                                    task.wait()
+                                    continue
+                                end
+                                Armed = true
+                                Root.CFrame = Safe
+                                Root.AssemblyLinearVelocity = Vector3.zero
+                                TeleportStandPart()
+                                print("[WZF][H2h] ten-second orbit completed; returned to pillar; job:", game.JobId)
+                                task.wait(.05)
+                                continue
                             end
                             local Sword = Mobs:FindFirstChild("SwordOfDecree")
                             local SwordOK, SwordReason = Valid(Sword, false)
@@ -7862,7 +7895,7 @@ if IsDungeon then
                         repeat
                             local DistanceFromCenter = 75 + (ArenaCenter.Size.X/2)
                             RotationAroundCenter = RotationAroundCenter + (ArenaRotationSpeed / DistanceFromCenter)
-                            if not SV.HeavenCycleActive and not CurrentMob and SV.Autofarm and CombatCharacterReady() then
+                            if not Toggles.HeavenSwordCycleToggle.Value and not CurrentMob and SV.Autofarm and CombatCharacterReady() then
                                 PlayerRoot.CFrame = CFrame.new(ArenaCenter.Position) * CFrame.Angles(0, math.rad(RotationAroundCenter), 0) * CFrame.new(DistanceFromCenter, 25, 0)
                                 PlayerRoot.CFrame = CFrame.new(PlayerRoot.Position, Vector3.new(ArenaCenter.Position.X, PlayerRoot.Position.Y, ArenaCenter.Position.Z))
                                 TeleportStandPart()
